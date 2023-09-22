@@ -62,8 +62,8 @@
 
 [这里插图]
 
+- 实现过程
 
-- 实现过程 
 ```c
 volatile size_t num=0;
 
@@ -97,11 +97,12 @@ void interrupt_handler(struct trapframe *tf) {
     }
 }
 ```
-定义`num`辅助记录打印次数，调用`clock_set_next_event()`设置下次始终中断，计数器`ticks`累加记录中断次数。当操作系统每遇到100次时钟中断后，调用`print_ticks()`，于控制台打印`100 ticks`，同时打印次数`num`累加，当打印完10行后，调用sbi.h中的`shut_down()`函数关机。
+
+定义 `num`辅助记录打印次数，调用 `clock_set_next_event()`设置下次始终中断，计数器 `ticks`累加记录中断次数。当操作系统每遇到100次时钟中断后，调用 `print_ticks()`，于控制台打印 `100 ticks`，同时打印次数 `num`累加，当打印完10行后，调用sbi.h中的 `shut_down()`函数关机。
 
 - 定时器中断处理流程
 
-OpenSBI提供的`sbi_set_timer()`接口，仅可以传入一个时刻，让它在那个时刻触发一次时钟中断。因此无法一次设置多个中断事件发生。于是选择初始只设置一个时钟中断，之后每次发生时钟中断时，设置下一次时钟中断的发生。
+OpenSBI提供的 `sbi_set_timer()`接口，仅可以传入一个时刻，让它在那个时刻触发一次时钟中断。因此无法一次设置多个中断事件发生。于是选择初始只设置一个时钟中断，之后每次发生时钟中断时，设置下一次时钟中断的发生。
 
 ```c
 // Hardcode timebase
@@ -128,36 +129,38 @@ void clock_init(void) {
 void clock_set_next_event(void) { sbi_set_timer(get_cycles() + timebase); }
 ```
 
-`SIE`（Supervisor Interrupt Enable，监管者中断使能）用于控制和管理处理器的中断使能状态。因此在初始化clock时，需要先开启时钟中断的使能。接着调用`clock_set_next_event(void)`设置时钟中断事件，使用`sbi_set_timer()`接口，将timer的数值变为`当前时间 + timebase`，即设置下次时钟中断的发生时间。
+`SIE`（Supervisor Interrupt Enable，监管者中断使能）用于控制和管理处理器的中断使能状态。因此在初始化clock时，需要先开启时钟中断的使能。接着调用 `clock_set_next_event(void)`设置时钟中断事件，使用 `sbi_set_timer()`接口，将timer的数值变为 `当前时间 + timebase`，即设置下次时钟中断的发生时间。
 
-回看时钟中断处理流程：每秒发生100次时钟中断，触发每次时钟中断后设置10ms后触发下一次时钟中断，每触发100次时钟中断（1秒钟）输出`100 ticks`到控制台。
+回看时钟中断处理流程：每秒发生100次时钟中断，触发每次时钟中断后设置10ms后触发下一次时钟中断，每触发100次时钟中断（1秒钟）输出 `100 ticks`到控制台。
 
 ## 扩展练习 Challenge1：描述与理解中断流程
+
 ### 描述ucore中处理中断异常的流程
 
 处理中断异常的流程大致可概括如下：
+
 - 中断异常产生
+
   - 当 CPU 执行指令时，如果发生错误或者遇到需要处理的事件，将引发异常或中断。
   - 中断分为异常（Exception，包括：访问无效内存地址、执行非法指令(除零)、发生缺页等），陷入（Trap，常见的形式有通过ecall进行系统调用(syscall)，或通过ebreak进入断点(breakpoint)），外部中断（Interrupt，典型的有定时器倒计时结束、串口收到数据等）。
-
 - 寻找中断入口，保存上下文
+
   - 默认情况下,不论处在什么权限模式，控制权都会被移交到 M 模式的异常处理程序。M 模式的异常处理程序可以将异常重新导向 S 模式，也支持通过异常委托机制（Machine Interrupt Delegation,机器中断委托）选择性地将中断和同步异常直接交给 S 模式处理,而完全绕过 M 模式。当触发中断进入 S 态进行处理时，`sepc`、`scause`、`stval`等寄存器会被硬件自动设置，将一些信息提供给中断处理程序
-  - 产生中断后，操作系统会根据`stvex`（中断向量表基址）把不同种类的中断映射到对应的中断处理程序。如果只有一个中断处理程序，那么可以让`stvec`直接指向那个中断处理程序的地址。
+  - 产生中断后，操作系统会根据 `stvex`（中断向量表基址）把不同种类的中断映射到对应的中断处理程序。如果只有一个中断处理程序，那么可以让 `stvec`直接指向那个中断处理程序的地址。
   - 找到中断入口点后，`SAVE_ALL`保存上下文信息（包括程序计数器 PC、各种寄存器等）到内核栈上，并将上下文包装成结构体送入对应的中断处理程序。
-
 - 中断处理
-  - 对中断进行初始化，通过`sscratch`判断是内核态产生的中断还是用户态产生的中断。
-  - 根据`scause`把中断处理、异常处理的工作分发给interrupt_handler()，exception_handler(), 这些函数再根据中断或异常的不同类型来处理。
 
+  - 对中断进行初始化，通过 `sscratch`判断是内核态产生的中断还是用户态产生的中断。
+  - 根据 `scause`把中断处理、异常处理的工作分发给interrupt_handler()，exception_handler(), 这些函数再根据中断或异常的不同类型来处理。
 - 恢复上下文
-  - 当中断处理程序执行完后，ucore 会将保存在内核栈上的上下文信息恢复回来，并使用`sret`等特权指令返回到原始的程序执行点继续执行。
 
+  - 当中断处理程序执行完后，ucore 会将保存在内核栈上的上下文信息恢复回来，并使用 `sret`等特权指令返回到原始的程序执行点继续执行。
 - 继续执行
+
   - CPU 从恢复现场之后的指令开始继续执行。如果异常处理程序成功地修复了问题，那么程序可以继续向下执行；否则，如果问题无法解决或者需要等待后续事件，则 CPU 可能会再次引起异常或中断，并重新执行上述流程。
 
-
-
 ### mov a0，sp的目的
+
 ```
     .globl __alltraps
 .align(2)
@@ -180,3 +183,42 @@ __trapret:
 ### SAVE_ALL中寄存器保存在栈中的位置
 
 ### 对于任何中断，__alltraps 中都需要保存所有寄存器吗？请说明理由。
+
+
+## 扩展练习Challenge3：完善异常中断
+
+直接在 `kern_init()`函数内部添加汇编代码，分别调用ebreak和mert指令尝试产生中断。在 `trap.c`的 `exception_handler()`内部分别添加完打印语句后，尝试编译链接，打开kernel.asm的对应片段
+
+```
+    asm volatile("mret"); //  插入无效指令
+    80200050:	30200073          	mret
+    asm volatile("ebreak"); // 插入断点指令
+    80200054:	9002                	ebreak
+```
+
+可以看到，mret指令对应4个字节，而ebreak只有2个字节，查阅参考资料发现，实际上此时ebreak设置环境断点调用的是16位的指令c.ebreak，而不是32位的break。因此在对应的打印语句后，应该分别更新epc为 `+4`和 `+2`：
+
+```c
+        case CAUSE_ILLEGAL_INSTRUCTION:
+            cprintf("Exception type:Illegal instruction\n");
+            cprintf("Illegal instruction caught at 0x%p\n",tf->epc);
+            tf->epc+=4;
+            break;
+        case CAUSE_BREAKPOINT:
+            cprintf("Exception type:breakpoint\n");
+            cprintf("breakpoint caught at 0x%p\n",tf->epc);
+            tf->epc+=2;
+            break;
+```
+
+`make qemu`后打印语句
+
+```c
+sbi_emulate_csr_read: hartid0: invalid csr_num=0x302
+Exception type:Illegal instruction
+Illegal instruction caught at 0x0x80200050
+Exception type:breakpoint
+breakpoint caught at 0x0x80200054
+```
+
+之后能够正常打印十次 `100ticks`并退出。

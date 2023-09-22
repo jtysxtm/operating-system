@@ -114,7 +114,7 @@ void interrupt_handler(struct trapframe *tf) {
             */
             clock_set_next_event();
             ticks++;
-            if(ticks==100)
+            if(ticks==TICK_NUM)
             {
                 print_ticks();
                 ticks=0;
@@ -164,7 +164,7 @@ void exception_handler(struct trapframe *tf) {
             */
             cprintf("Exception type:Illegal instruction\n");
             cprintf("Illegal instruction caught at 0x%p\n",tf->epc);
-            tf->epc+=2;
+            tf->epc+=4;
             break;
         case CAUSE_BREAKPOINT:
             //断点异常处理
