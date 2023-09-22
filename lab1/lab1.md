@@ -83,7 +83,7 @@ void interrupt_handler(struct trapframe *tf) {
         case IRQ_S_TIMER:
             clock_set_next_event();
             ticks++;
-            if(ticks==100)
+            if(ticks==TICK_NUM)
             {
                 print_ticks();
                 ticks=0;
