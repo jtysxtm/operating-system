@@ -576,7 +576,7 @@ void interrupt_handler(struct trapframe *tf) {
     80200434:	00004717          	auipc	a4,0x4
     80200438:	bec70713          	addi	a4,a4,-1044 # 80204020 <ticks>
     8020043c:	631c                	ld	a5,0(a4)
-            if(ticks==100)
+            if(ticks==TICK_NUM)
     8020043e:	06400693          	li	a3,100
     80200442:	00004417          	auipc	s0,0x4
     80200446:	bce40413          	addi	s0,s0,-1074 # 80204010 <edata>
@@ -584,7 +584,7 @@ void interrupt_handler(struct trapframe *tf) {
     8020044a:	0785                	addi	a5,a5,1
     8020044c:	00004617          	auipc	a2,0x4
     80200450:	bcf63a23          	sd	a5,-1068(a2) # 80204020 <ticks>
-            if(ticks==100)
+            if(ticks==TICK_NUM)
     80200454:	631c                	ld	a5,0(a4)
     80200456:	00d78c63          	beq	a5,a3,8020046e <interrupt_handler+0xa2>
             if(num==10)
