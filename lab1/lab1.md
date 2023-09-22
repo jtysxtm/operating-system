@@ -59,7 +59,9 @@
 ## 练习2：完善中断处理
 
 - 时钟中断处理的实现
-  
+  ![结果1](https://github.com/jtysxtm/operating-system/blob/main/lab1/image/lab1/1695360539860.png)
+
+  ![结果2](https://github.com/jtysxtm/operating-system/blob/main/lab1/image/lab1/1695360932714.png)
 - 实现过程
 
 ```c
