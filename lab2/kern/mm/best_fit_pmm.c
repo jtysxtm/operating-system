@@ -115,18 +115,18 @@ best_fit_alloc_pages(size_t n) {
     // 下面的代码是first-fit的部分代码，请修改下面的代码改为best-fit
     // 遍历空闲链表，查找满足需求的空闲页框
     // 如果找到满足需求的页面，记录该页面以及当前找到的最小连续空闲页框数量
-
+    struct Page *temp = NULL;
     while ((le = list_next(le)) != &free_list) {
         struct Page *p = le2page(le, page_link);
         if (p->property >= n) {//满足需求
             if(p->property < min_size)//最小连续空闲页框数量
             {
-                page = p;
                 min_size=p->property;
+                temp = p;
             }
         }
     }
-
+    page=temp;    
 
     if (page != NULL) {//找到了最佳匹配
         list_entry_t* prev = list_prev(&(page->page_link));
@@ -157,7 +157,7 @@ best_fit_free_pages(struct Page *base, size_t n) {
     // 具体来说就是设置当前页块的属性为释放的页块数、并将当前页块标记为已分配状态、最后增加nr_free的值
 
     base->property=n;
-    SetPageReserved(base);
+    SetPageProperty(base);
     nr_free+=n;
 
 
