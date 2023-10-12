@@ -10,6 +10,7 @@
 #include <trap.h>
 
 #define TICK_NUM 100
+volatile size_t num=0;
 
 static void print_ticks() {
     cprintf("%d ticks\n", TICK_NUM);
@@ -126,8 +127,16 @@ void interrupt_handler(struct trapframe *tf) {
             // cprintf("Supervisor timer interrupt\n");
             // clear_csr(sip, SIP_STIP);
             clock_set_next_event();
-            if (++ticks % TICK_NUM == 0) {
+            ticks++;
+            if(ticks==TICK_NUM)
+            {
                 print_ticks();
+                ticks=0;
+                num++;
+            }
+            if(num==10)
+            {
+                sbi_shutdown();
             }
             break;
         case IRQ_H_TIMER:
@@ -161,8 +170,14 @@ void exception_handler(struct trapframe *tf) {
         case CAUSE_FAULT_FETCH:
             break;
         case CAUSE_ILLEGAL_INSTRUCTION:
+            cprintf("Exception type:Illegal instruction\n");
+            cprintf("Illegal instruction caught at 0x%p\n",tf->epc);
+            tf->epc+=4;
             break;
         case CAUSE_BREAKPOINT:
+            cprintf("Exception type:breakpoint\n");
+            cprintf("breakpoint caught at 0x%p\n",tf->epc);
+            tf->epc+=2;
             break;
         case CAUSE_MISALIGNED_LOAD:
             break;
