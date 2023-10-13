@@ -26,6 +26,9 @@ uintptr_t *satp_virtual = NULL;
 // physical address of boot-time page directory
 uintptr_t satp_physical;
 
+size_t fppn;
+
+
 // physical memory management
 const struct pmm_manager *pmm_manager;
 
@@ -113,6 +116,7 @@ static void page_init(void) {
     mem_end = ROUNDDOWN(mem_end, PGSIZE);
     if (freemem < mem_end) {
         init_memmap(pa2page(mem_begin), (mem_end - mem_begin) / PGSIZE);
+        fppn=pa2page(mem_begin)-pages+nbase;
     }
 }
 

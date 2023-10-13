@@ -7,6 +7,7 @@ free_buddy_t free_buddy;
 #define free_array (free_buddy.buddy_array)
 #define order (free_buddy.order)
 #define nr_free (free_buddy.nr_free)
+extern ppn_t fppn;
 
 #define IS_POWER_OF_2(x) (!((x)&((x)-1)))
 
@@ -21,13 +22,18 @@ static uint32_t GET_POWER_OF_2(size_t n)
     return power;
 }
 
-
+static struct Page* GET_BUDDY(struct Page *page)
+{
+    uint32_t power=page->property;
+    uint32_t ppn=fppn+(1<<power)^(page2ppn(page)-fppn);
+    return page+(ppn-page2ppn(page));
+}
 
 static void buddy_init(void)
 {
     for(int i=0;i<15;i++)
     {
-        list_init(free_array+i);v 
+        list_init(free_array+i);
     }
     order=0;
     nr_free=0;
@@ -44,7 +50,8 @@ static void buddy_init_memmap(struct Page *base,size_t real_n)
     for (; p != base + n; p ++) 
     {
         assert(PageReserved(p));// 确保页面已保留（PageReserved 宏用于检查页面是否已被保留，通常表示已分配给操作系统或内核）
-        p->flags = p->property = 0;//页面空闲
+        p->flags =  0;//页面空闲
+        p->property =-1;
         set_page_ref(p, 0);//页面空闲，无引用
     }
     list_add(&(free_array[order]), &(base->page_link));
@@ -91,5 +98,31 @@ static struct Page * buddy_alloc_pages(size_t real_n)
 static void buddy_free_pages(struct Page *base, size_t n)
 {
     assert(n>0);
-    
+    struct Page *free_page=base;
+    struct Page *free_page_buddy=GET_BUDDY(free_page);
+    list_add(&(free_array[free_page->property]),&(free_page->page_link));
+    while(!PageProperty(free_page_buddy)&&free_page->property<15)
+    {
+        if(free_page_buddy<free_page)
+        {
+            free_page->property=-1;
+            ClearPageProperty(free_page);
+            list_del(&(free_page->page_link));
+            list_del(&(free_page_buddy->page_link));
+            list_add(&(free_array[free_page->property]),&(free_page->page_link));
+            SetPageProperty(free_page_buddy);
+            free_page=free_page_buddy;
+            free_page_buddy=GET_BUDDY(free_page_buddy);
+        }
+        else{
+            list_del(&(free_page->page_link));
+            list_del(&(free_page_buddy->page_link));
+            free_page->property+=1;
+            list_add(&(free_array[free_page->property]),&(free_page->page_link));
+            free_page_buddy=GET_BUDDY(free_page);
+        }
+        ClearPageProperty(free_page);
+        nr_free+=pow(2,base->property);
+        return;
+    }
 }
