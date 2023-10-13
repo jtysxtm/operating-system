@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "memlayout.h": "c",
+        "error.h": "c"
+    }
+}

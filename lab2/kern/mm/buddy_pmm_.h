@@ -3,7 +3,7 @@
 
 #include <pmm.h>
 
-extern const struct pmm_manager buddy_pmm_manager;
+extern const struct pmm_manager buddy_pmm_manager_;
 
 typedef struct {
     unsigned int order;                           // 伙伴二叉树的层数
