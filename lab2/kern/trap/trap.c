@@ -181,7 +181,7 @@ void exception_handler(struct trapframe *tf) {
         case CAUSE_MACHINE_ECALL:
             break;
         default:
-            print_trapframe(tf);
+            //print_trapframe(tf);
             break;
     }
 }

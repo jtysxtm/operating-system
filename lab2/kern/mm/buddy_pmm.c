@@ -68,7 +68,8 @@ static void buddy_init_memmap(struct Page *base, size_t n){
     unsigned node_size = manager_size / 2;
     // 遍历 buddy_manager 数组，初始化每个索引对应的 buddy 大小
     for(; i < manager_size; i++){
-        buddy_manager[i] = node_size;
+        *(buddy_manager+i)= node_size;
+        cprintf("%p",buddy_manager+i);
         if(IS_POWER_OF_2(i+1)){
             node_size /= 2;//如果 i+1 是2的幂次方，则调整节点大小为原来的一半
         }
