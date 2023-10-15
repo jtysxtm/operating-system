@@ -72,31 +72,31 @@
 
 1. 初始化物理内存管理器，设置 free_list 和 nr_free 。
 
-   - default_init
+   - best_fit_init
      - 物理内存管理器的初始化函数。用于初始化空闲内存块列表 free_list 并将空闲内存块数量 nr_free 设置为0。
      - 这个函数在系统启动时调用，一次性初始化物理内存管理器。
-2. 在系统启动时，通过调用 default_init_memmap 函数初始化可用的物理页面。
+2. 在系统启动时，通过调用 best_fit_init_memmap 函数初始化可用的物理页面。
 
-   - default_init_memmap
+   - best_fit_init_memmap
      - 用于初始化内存映射。在系统启动时，内核需要知道哪些物理页面是可用的，default_init_memmap函数被用于初始化这些可用页面。
      - 遍历一个内存块中的每一页，初始化每一页的属性，包括标志 flags 和属性 property；然后将引用计数 ref 设置为0，并将这些页面添加到 free_list 列表中，以表示它们是可用的；更新 nr_free 变量，表示可用页面的总数量。
-3. 在进程或内核代码中，使用 default_alloc_pages 函数来分配物理页面，并使用  default_free_pages 函数来释放页面。
+3. 在进程或内核代码中，使用 best_fit_alloc_pages 函数来分配物理页面，并使用  best_fit_free_pages 函数来释放页面。
 
-   - default_alloc_pages函数
+   - best_fit_alloc_pages函数
 
      - 用于分配指定数量的物理页面，实现了第一适应内存分配算法。
      - 遍历 free_list 列表，查找满足需求的空闲页框。如果找到满足需求的页面，记录该页面以及当前找到的最小连续空闲页框数量。最终获得满足需求且连续空闲页数量最少的块，分配其中的页面，并将剩余的页面添加回 free_list 列表。如果没有找到满足条件的块，返回NULL。
-   - default_free_pages函数
+   - best_fit_free_pages函数
 
      - 用于释放一组连续的物理页面。
      - 将这些页面添加回 free_list 列表，并尝试合并相邻的空闲块，以最大程度地减少碎片化；更新 nr_free 变量以反映可用页面的数量。
-4. 定期调用 default_check 函数来检查物理内存管理器的正确性，以确保它正常工作。
+4. 定期调用 best_fit_check 函数来检查物理内存管理器的正确性，以确保它正常工作。
 
-   - default_nr_free_pages函数
+   - best_fit_nr_free_pages函数
 
      - 用于查询可用页面的数量。
      - 返回 nr_free 变量的值，表示当前系统中可用的物理页面数量。
-   - default_check函数
+   - best_fit_check函数
 
      - 用于检查物理内存管理器的正确性。
      - 执行一系列内存分配和释放操作，并检查各个步骤的结果是否符合预期。这有助于确保物理内存管理器的正确性和稳定性。
