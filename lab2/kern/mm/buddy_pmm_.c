@@ -30,7 +30,7 @@ static struct Page* GET_BUDDY(struct Page *page)
     return page+(ppn-page2ppn(page));
 }
 //展示空闲页面情况
-static void show_buddy_array(void) {
+static void SHOW_BUDDY_ARRAY(void) {
     cprintf("[!]BS: Printing buddy array:\n");
     for (int i = 0;i < 16;i ++) {
         cprintf("%d layer: ", i);
@@ -43,7 +43,7 @@ static void show_buddy_array(void) {
     }
     return;
 }
-//空闲链表数组初始化
+//空闲链表数组(管理器)初始化
 static void buddy_init(void)
 {
     for(int i=0;i<16;i++)
@@ -77,7 +77,7 @@ static void buddy_init_memmap(struct Page *base,size_t real_n)
     //cprintf("base order is %d\n",order);
     return;
 }
-//声明一个内存块
+//分配一个内存块
 static struct Page * buddy_alloc_pages(size_t real_n)
 {
     assert (real_n>0);
@@ -190,7 +190,7 @@ buddy_nr_free_pages(void) {
     assert(page2pa(p0) < npage * PGSIZE);
     assert(page2pa(p1) < npage * PGSIZE);
     assert(page2pa(p2) < npage * PGSIZE);
-    show_buddy_array();
+    SHOW_BUDDY_ARRAY();
     // 释放 p0, p1, 和 p2，然后检查 nr_free 是否为3。
     free_page(p0);
     //cprintf("p0 free\n");
@@ -199,33 +199,37 @@ buddy_nr_free_pages(void) {
     free_page(p2);
     //show_buddy_array();
     //cprintf("nr_free is %d",nr_free);
-    show_buddy_array();
+    SHOW_BUDDY_ARRAY();
     assert(nr_free == 16384);
 
 
     assert((p0 = alloc_pages(4)) != NULL);
     assert((p1 = alloc_pages(2)) != NULL);
     assert((p2 = alloc_pages(1)) != NULL);
-    cprintf("%p,%p,%p\n",page2pa(p0),page2pa(p1),page2pa(p2));show_buddy_array();
+    cprintf("%p,%p,%p\n",page2pa(p0),page2pa(p1),page2pa(p2));SHOW_BUDDY_ARRAY();
     free_pages(p0, 4);
-    cprintf("p0 free\n");show_buddy_array();
+    cprintf("p0 free\n");SHOW_BUDDY_ARRAY();
     free_pages(p1, 2);
-    show_buddy_array();
-    cprintf("p1 free\n");show_buddy_array();
+    SHOW_BUDDY_ARRAY();
+    cprintf("p1 free\n");SHOW_BUDDY_ARRAY();
     free_pages(p2, 1);
-    cprintf("p2 free\n");show_buddy_array();
-    show_buddy_array();
+    cprintf("p2 free\n");SHOW_BUDDY_ARRAY();
+    SHOW_BUDDY_ARRAY();
 
     assert((p0 = alloc_pages(3)) != NULL);
     assert((p1 = alloc_pages(3)) != NULL);
-    show_buddy_array();
+    SHOW_BUDDY_ARRAY();
     free_pages(p0, 3);
     free_pages(p1, 3);
-    show_buddy_array();
+    SHOW_BUDDY_ARRAY();
+
+    assert((p0 = alloc_pages(16385)) == NULL);
+    assert((p0 = alloc_pages(16384)) != NULL);
+    free_pages(p0, 16384);
 }   
 
 static void buddy_check(void) {
-    show_buddy_array();
+    SHOW_BUDDY_ARRAY();
 
     basic_check();// 调用 basic_check 函数，检查基本功能是否正常
 
