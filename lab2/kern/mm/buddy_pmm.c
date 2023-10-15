@@ -27,6 +27,7 @@ static struct Page* GET_BUDDY(struct Page *page)
 {
     uint32_t power=page->property;
     size_t ppn=fppn+((1<<power)^(page2ppn(page)-fppn));//得到伙伴块的物理页号，fppn为buddy system起始的物理页号
+    //cprintf("page ppn is %d;buddy ppn is %d",page2ppn(page),ppn);
     return page+(ppn-page2ppn(page));
 }
 //展示空闲页面情况
@@ -143,6 +144,7 @@ static void buddy_free_pages(struct Page *base, size_t n)
     //将释放的块接入到对应的项的空闲链表上
     list_add(&(free_array[free_page->property]),&(free_page->page_link));
     //当其伙伴块没有被使用且不大于设定的最大块时
+    //SHOW_BUDDY_ARRAY();
     while(!PageProperty(free_page_buddy)&&free_page->property<14)
     {
         //cprintf("in while\n");
@@ -168,7 +170,7 @@ static void buddy_free_pages(struct Page *base, size_t n)
         //cprintf("buddy's property is %d\n",free_page_buddy->property);
         //show_buddy_array();
     }
-    //ClearPageProperty(free_page);
+    ClearPageProperty(free_page);
     return;
 }
 static size_t
@@ -193,10 +195,11 @@ buddy_nr_free_pages(void) {
     SHOW_BUDDY_ARRAY();
     // 释放 p0, p1, 和 p2，然后检查 nr_free 是否为3。
     free_page(p0);
-    //cprintf("p0 free\n");
+    cprintf("p0 free\n");
     free_page(p1);
-    //cprintf("p1 free\n");
+    cprintf("p1 free\n");
     free_page(p2);
+    cprintf("p2 free\n");
     //show_buddy_array();
     //cprintf("nr_free is %d",nr_free);
     SHOW_BUDDY_ARRAY();
@@ -208,12 +211,12 @@ buddy_nr_free_pages(void) {
     assert((p2 = alloc_pages(1)) != NULL);
     cprintf("%p,%p,%p\n",page2pa(p0),page2pa(p1),page2pa(p2));SHOW_BUDDY_ARRAY();
     free_pages(p0, 4);
-    cprintf("p0 free\n");SHOW_BUDDY_ARRAY();
+    cprintf("p0 free\n");
     free_pages(p1, 2);
     SHOW_BUDDY_ARRAY();
-    cprintf("p1 free\n");SHOW_BUDDY_ARRAY();
+    cprintf("p1 free\n");
     free_pages(p2, 1);
-    cprintf("p2 free\n");SHOW_BUDDY_ARRAY();
+    cprintf("p2 free\n");
     SHOW_BUDDY_ARRAY();
 
     assert((p0 = alloc_pages(3)) != NULL);
