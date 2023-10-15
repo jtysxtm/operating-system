@@ -4,270 +4,238 @@
 #include <buddy_pmm.h>
 #include <stdio.h>
 
-//计算当前节点的左孩子节点在数组中的下标；
-#define LEFT_LEAF(index) ((index)*2)
-//计算当前节点的右孩子节点在数组中的下标；
-#define RIGHT_LEAF(index) ((index)*2+1)
-//计算当前节点的父节点在数组中的下标；
-#define PARENT(index) ((index)/2)
-//判断 x 是否为 2 的幂；
+free_buddy_t free_buddy;
+#define free_array (free_buddy.buddy_array)
+#define order (free_buddy.order)
+#define nr_free (free_buddy.nr_free)
+extern ppn_t fppn;
+//判断x是否为2的次幂
 #define IS_POWER_OF_2(x) (!((x)&((x)-1)))
-//计算 a 和 b 中的最大值。
-#define MAX(a, b) ((a) > (b) ? (a) : (b))
-
-unsigned* buddy_manager;
-struct Page* page_base;
-int free_page_num, manager_size;
-
-//size如果不是2的幂，向上取上后的幂次方
-int UP_LOG(int size)
+//返回n相对于2的幂，向下取整
+static uint32_t GET_POWER_OF_2(size_t n)
 {
-    int n=0;//幂次
-    int temp=size;
-    while(temp>>=1)
+    uint32_t power = 0;
+    while(n>>1)
     {
-        n++;
+        n>>=1;
+        power++;
     }
-    temp= (size>>n)<<n;
-    if(size-temp!=0)//如果不为0说明size的二进制表示中还有1的位
+    return power;
+}
+//获取page的伙伴块
+static struct Page* GET_BUDDY(struct Page *page)
+{
+    uint32_t power=page->property;
+    size_t ppn=fppn+((1<<power)^(page2ppn(page)-fppn));//得到伙伴块的物理页号，fppn为buddy system起始的物理页号
+    return page+(ppn-page2ppn(page));
+}
+//展示空闲页面情况
+static void SHOW_BUDDY_ARRAY(void) {
+    cprintf("[!]BS: Printing buddy array:\n");
+    for (int i = 0;i < 16;i ++) {
+        cprintf("%d layer: ", i);
+        list_entry_t *le = &(free_array[i]);
+        while ((le = list_next(le)) != &(free_array[i])) {
+            struct Page *p = le2page(le, page_link);
+            cprintf("%d ", 1 << (p->property));
+        }
+        cprintf("\n");
+    }
+    return;
+}
+//空闲链表数组(管理器)初始化
+static void buddy_init(void)
+{
+    for(int i=0;i<16;i++)
     {
-        n++;//向上取
+        list_init(free_array+i);
     }
-    return n;//size的最小2的幂次方的指数
+    order=0;
+    nr_free=0;
+    return;
 }
-
-static void buddy_init(void) {
-    free_page_num = 0;
-}
-
-static void buddy_init_memmap(struct Page *base, size_t n){
-    // 首先对页进行初始化
-    struct Page* p;
-    for(p = base; p != base + n; p++){
-        assert(PageReserved(p));
-        p->flags = p->property = 0;
-        set_page_ref(p, 0);
-        SetPageProperty(p);
+//物理页初始化
+static void buddy_init_memmap(struct Page *base,size_t real_n)
+{
+    assert(real_n>0);
+    //传入的大小向下取整为2的次幂，设置取整后的值为空闲页面的大小
+    struct Page *p=base;
+    order=GET_POWER_OF_2(real_n);
+    size_t n=1<<order;
+    nr_free=n;
+    //对每一个页面都进行初始化
+    for (; p != base + n; p+=1) 
+    {
+        assert(PageReserved(p));// 确保页面已保留
+        p->flags =  0;//页面空闲
+        p->property = 0;//页大小2^0=1
+        set_page_ref(p, 0);//页面空闲，无引用                
     }
-    // 获取 buddy_manager 数组的长度
-    // manager_size = 1<<UP_LOG(n) 只能容纳到满二叉树中的节点数
-    //不能同时存储一棵满二叉树和它的对应堆中的信息（即各个节点的大小）
-    manager_size = 2 * (1<<UP_LOG(n));
-    // 获取 buddy_manager 的起始地址 预留base最开始的部分给 buddy_manager
-    //buddy_manager = (unsigned*) page2kva(base);
-    buddy_manager = (unsigned*) page2pa(base);
-    // 调整 base，向后移动 4 * manager_size / 4096 个页
-    // 4 * manager_size为buddy_manager占用大小（字节单位），处以4096转换为页数
-    base += 4 * manager_size / 4096;
-    // page_base 为可用内存空间的起始地址，在后续申请和释放内存的时使用
-    page_base = base;
-    // 剩余可用页数
-    free_page_num = n - 4 * manager_size / 4096;
-    // buddy数组的下标[1 … manager_size]有效
-    unsigned i = 1;
-    unsigned node_size = manager_size / 2;
-    // 遍历 buddy_manager 数组，初始化每个索引对应的 buddy 大小
-    for(; i < manager_size; i++){
-        *(buddy_manager+i)= node_size;
-        cprintf("%p",buddy_manager+i);
-        if(IS_POWER_OF_2(i+1)){
-            node_size /= 2;//如果 i+1 是2的幂次方，则调整节点大小为原来的一半
+    //将整个空闲页加入到空闲链表数组对应项的空闲链表中
+    list_add(&(free_array[order]), &(base->page_link));
+    base->property=order;
+    //cprintf("base order is %d\n",order);
+    return;
+}
+//分配一个内存块
+static struct Page * buddy_alloc_pages(size_t real_n)
+{
+    assert (real_n>0);
+    //cprintf("real_n is %d\n",real_n);
+    //需要的空间大于可用空间时返回NULL
+    if(real_n>nr_free)
+    return NULL;
+    //real_n向上取整得到n，同时得到取整后的幂次order
+    struct Page *page=NULL;
+    order=IS_POWER_OF_2(real_n)?GET_POWER_OF_2(real_n):GET_POWER_OF_2(real_n)+1;
+    //cprintf("is order of 2?%d\n",IS_POWER_OF_2(real_n));
+    //cprintf("order is %d\n",order);
+    size_t n=1<<order;
+    while(1)
+    {
+        //空闲链表中恰好有大小为n的空闲块，直接分配
+        if(!list_empty(&(free_array[order])))
+        {
+            //show_buddy_array();
+            //将该空闲块断开
+            page=le2page(list_next(&(free_array[order])),page_link);
+            list_del(list_next(&(free_array[order])));
+            //设置该块的property位为1，表示已使用
+            SetPageProperty(page);
+            //更新空闲空间的大小
+            nr_free-=n;
+            //show_buddy_array();
+            //cprintf("nr_free is %d",nr_free);
+            //show_buddy_array();
+            //cprintf("page->property is %d\n",page->property);
+            break;
+        }
+        //否则从第一个比n大的存在于空闲链表上的空闲块开始进行块分割
+        for(int i=order;i<16;i++)
+        {
+            if(!list_empty(&(free_array[i])))
+            {   //原块分为两块
+                struct Page *page1=le2page(list_next(&(free_array[i])),page_link);
+                struct Page *page2=page1+(1<<(i-1));
+                //修改分割后的块大小的幂次
+                page1->property=i-1;
+                page2->property=i-1;
+                //断开原块，连接新块
+                list_del(list_next(&(free_array[i])));
+                list_add(&(free_array[i-1]),&(page2->page_link));
+                list_add(&(free_array[i-1]),&(page1->page_link));
+                //cprintf("devide into 2^%d block\n",i-1);
+                break;
+            }
         }
     }
-    base->property = free_page_num;//// 将 base 的属性设置为剩余可用页数
-    SetPageProperty(base);
-
-    //打印初始化信息
-    cprintf("===================buddy init end===================\n");
-    cprintf("free_size = %d\n", free_page_num);
-    cprintf("buddy_size = %d\n", manager_size);
-    cprintf("buddy_addr = 0x%08x\n", buddy_manager);
-    cprintf("manager_page_base = 0x%08x\n", page_base);
-    cprintf("====================================================\n");
+    return page;
 }
-
-int buddy_alloc(int size){
-    unsigned index = 1;//根节点开始遍历
-    unsigned offset = 0;//分配块的便宜量
-    unsigned node_size;
-
-    if(buddy_manager[index] < size)//如果根节点大小小于需要的快，无内存可用
-        return -1;
-
-    //向上取
-    if(size <= 0)
-        size = 1;
-    else if(!IS_POWER_OF_2(size))
-        size = 1 << UP_LOG(size);
-    
-    // 从根节点往下深度遍历，找到恰好等于size的块
-    for(node_size = manager_size / 2; node_size != size; node_size /= 2){
-        if(buddy_manager[LEFT_LEAF(index)] >= size)// 如果左子节点的大小大于等于需要的块大小，则向左子节点移动
-            index = LEFT_LEAF(index);//优先分左
-        else
-            index = RIGHT_LEAF(index);
-    }
-
-    // 将找到的块取出分配
-    buddy_manager[index] = 0;
-
-    // 计算块在所有块内存中的索引
-    // (index) * node_size：从内存管理器起始位置开始的偏移量（字节）
-    // offset：相对于整个内存区域的偏移量
-    offset = (index) * node_size - manager_size / 2;
-    cprintf(" index:%u offset:%u ", index, offset);
-
-    // 向上回溯至根节点，修改沿途节点的大小
-    while(index > 1){
-        index = PARENT(index);
-        buddy_manager[index] = MAX(buddy_manager[LEFT_LEAF(index)],buddy_manager[RIGHT_LEAF(index)]);
-        //保留左右子节点中大的块的大小
-    }
-
-    return offset;//返回分配块的偏移量即索引
-}
-
-static struct Page* buddy_alloc_pages(size_t n) {
-    cprintf("alloc %u pages", n);
+//释放内存页块
+static void buddy_free_pages(struct Page *base, size_t n)
+{
     assert(n>0);
-    if(n > free_page_num)
-        return NULL;
-
-    // 获取分配的页在内存中的起始地址
-    int offset = buddy_alloc(n);
-
-    struct Page *base = page_base + offset;
-
-    struct Page *page;
-    int round_n = 1 << UP_LOG(n);//总共取出的
-    // 将每一个取出的块由空闲态改为保留态
-    for(page = base; page != base + round_n; page++){
-        ClearPageProperty(page);
+    //更新空闲空间大小
+    nr_free+=1<<base->property;  
+    //cprintf("base property is %d",base->property);
+    struct Page *free_page=base;
+    struct Page *free_page_buddy=GET_BUDDY(free_page);
+    //将释放的块接入到对应的项的空闲链表上
+    list_add(&(free_array[free_page->property]),&(free_page->page_link));
+    //当其伙伴块没有被使用且不大于设定的最大块时
+    while(!PageProperty(free_page_buddy)&&free_page->property<14)
+    {
+        //cprintf("in while\n");
+        //释放的块是右块，和伙伴块互换位置
+        if(free_page_buddy<free_page)
+        {
+            struct Page* temp;
+            free_page->property=0;
+            ClearPageProperty(free_page);
+            temp=free_page;
+            free_page=free_page_buddy;
+            free_page_buddy=temp;
+        }
+        //断开两个块原本的连接
+        list_del(&(free_page->page_link));
+        list_del(&(free_page_buddy->page_link));
+        //对左块更新大小的幂次+1
+        free_page->property+=1;
+        //对合并后的左块将其连接到更高一次的空闲链表上
+        list_add(&(free_array[free_page->property]),&(free_page->page_link));
+        //接着循环到更高一次
+        free_page_buddy=GET_BUDDY(free_page);
+        //cprintf("buddy's property is %d\n",free_page_buddy->property);
+        //show_buddy_array();
     }
-
-    free_page_num -= round_n;//更新空闲页数不
-    base->property = n;//
-    cprintf("finish!\n");
-    return base;
+    //ClearPageProperty(free_page);
+    return;
+}
+static size_t
+buddy_nr_free_pages(void) {
+    return nr_free;
 }
 
-static void buddy_free_pages(struct Page* base, size_t n) {
-    cprintf("free  %u pages", n);
-    // 重置pages中对应的page
-    assert(n > 0);
-    n = 1 << UP_LOG(n);
-
-    // 检查起始地址 base 是否对应保留态的页
-    //检查从base开始的连续 n 个页是否正确分配，并且没有被标记为保留态或者属性态
-    assert(!PageReserved(base));
-    for(struct Page* p = base; p < base + n; p++){
-        assert(!PageReserved(p) && !PageProperty(p));
-        set_page_ref(p, 0);
-    }
-
-    // STEP2: 将buddy中的对应节点释放
-    // 开始块序号 相对于整个内存区域的偏移量
-    unsigned offset = base - page_base;
-    // 对应叶节点索引
-    unsigned index = manager_size / 2 + offset;
-    unsigned node_size = 1;
-
-    while(node_size!=n){
-        // 自底向上
-        index = PARENT(index);
-        node_size *= 2;
-        assert(index);
-    }
-    //找到在 buddy_manager 数组中对应位置的节点，并将该节点大小设置为 n
-    buddy_manager[index] = node_size;
-    cprintf(" index:%u offset:%u ", index, offset);
-
-    // 回溯直到根节点，更改沿途值
-    index = PARENT(index);
-    node_size *= 2;
-    while(index){
-        unsigned leftSize = buddy_manager[LEFT_LEAF(index)];
-        unsigned rightSize = buddy_manager[RIGHT_LEAF(index)];
-
-        if(leftSize + rightSize == node_size){//该节点对应的空闲空间是连续的，可合并
-            buddy_manager[index] = node_size;
-        }
-        else if(leftSize>rightSize){//当前节点的大小更新为左节点的大小
-            buddy_manager[index] = leftSize;
-        }
-        else{
-            buddy_manager[index] = rightSize;
-        }
-        index = PARENT(index);
-        node_size *= 2;
-    }
-
-
-    free_page_num += n;//更新空闲页数目
-    cprintf("finish!\n");
-}
-
-static size_t buddy_nr_free_pages(void) {
-    return free_page_num;
-}
-
-// static void
-// basic_check(void) {
-
-// }
-
-
-static void
-buddy_check(void) {
-    cprintf("buddy check!\n");
-    struct Page *p0, *A, *B, *C, *D;
-    p0 = A = B = C = D = NULL;
-
+ static void basic_check(void) {
+    struct Page *p0, *p1, *p2;
+    p0 = p1 = p2 = NULL;
     assert((p0 = alloc_page()) != NULL);
-    assert((A = alloc_page()) != NULL);
-    assert((B = alloc_page()) != NULL);
+    assert((p1 = alloc_page()) != NULL);
+    assert((p2 = alloc_page()) != NULL);
 
-    assert(p0 != A && p0 != B && A != B);
-    assert(page_ref(p0) == 0 && page_ref(A) == 0 && page_ref(B) == 0);
+    assert(p0 != p1 && p0 != p2 && p1 != p2); // 确保分配的页面不同
+    assert(page_ref(p0) == 0 && page_ref(p1) == 0 && page_ref(p2) == 0); // 确保引用计数都为0。
 
+    // 确保物理地址在合理范围内（小于 npage * PGSIZE）
+    assert(page2pa(p0) < npage * PGSIZE);
+    assert(page2pa(p1) < npage * PGSIZE);
+    assert(page2pa(p2) < npage * PGSIZE);
+    SHOW_BUDDY_ARRAY();
+    // 释放 p0, p1, 和 p2，然后检查 nr_free 是否为3。
     free_page(p0);
-    free_page(A);
-    free_page(B);
+    //cprintf("p0 free\n");
+    free_page(p1);
+    //cprintf("p1 free\n");
+    free_page(p2);
+    //show_buddy_array();
+    //cprintf("nr_free is %d",nr_free);
+    SHOW_BUDDY_ARRAY();
+    assert(nr_free == 16384);
 
-    A = alloc_pages(512);
-    B = alloc_pages(512);
-    free_pages(A, 256);
-    free_pages(B, 512);
-    free_pages(A + 256, 256);
 
-    p0 = alloc_pages(8192);
-    assert(p0 == A);
-    // free_pages(p0, 1024);
-    //以下是根据链接中的样例测试编写的
-    A = alloc_pages(128);
-    B = alloc_pages(64);
-    // 检查是否相邻
-    assert(A + 128 == B);
-    C = alloc_pages(128);
-    // 检查C有没有和A重叠
-    assert(A + 256 == C);
-    // 释放A
-    free_pages(A, 128);
-    D = alloc_pages(64);
-    cprintf("D %p\n", D);
-    // 检查D是否能够使用A刚刚释放的内存
-    assert(D + 128 == B);
-    free_pages(C, 128);
-    C = alloc_pages(64);
-    // 检查C是否在B、D之间
-    assert(C == D + 64 && C == B - 64);
-    free_pages(B, 64);
-    free_pages(D, 64);
-    free_pages(C, 64);
-    // 全部释放
-    free_pages(p0, 8192);
+    assert((p0 = alloc_pages(4)) != NULL);
+    assert((p1 = alloc_pages(2)) != NULL);
+    assert((p2 = alloc_pages(1)) != NULL);
+    cprintf("%p,%p,%p\n",page2pa(p0),page2pa(p1),page2pa(p2));SHOW_BUDDY_ARRAY();
+    free_pages(p0, 4);
+    cprintf("p0 free\n");SHOW_BUDDY_ARRAY();
+    free_pages(p1, 2);
+    SHOW_BUDDY_ARRAY();
+    cprintf("p1 free\n");SHOW_BUDDY_ARRAY();
+    free_pages(p2, 1);
+    cprintf("p2 free\n");SHOW_BUDDY_ARRAY();
+    SHOW_BUDDY_ARRAY();
+
+    assert((p0 = alloc_pages(3)) != NULL);
+    assert((p1 = alloc_pages(3)) != NULL);
+    SHOW_BUDDY_ARRAY();
+    free_pages(p0, 3);
+    free_pages(p1, 3);
+    SHOW_BUDDY_ARRAY();
+
+    assert((p0 = alloc_pages(16385)) == NULL);
+    assert((p0 = alloc_pages(16384)) != NULL);
+    free_pages(p0, 16384);
+}   
+
+static void buddy_check(void) {
+    SHOW_BUDDY_ARRAY();
+
+    basic_check();// 调用 basic_check 函数，检查基本功能是否正常
+
+
+
 }
-
 
 const struct pmm_manager buddy_pmm_manager = {
     .name = "buddy_pmm_manager",
