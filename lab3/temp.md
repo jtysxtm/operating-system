@@ -34,4 +34,17 @@
 
 为参数提供的地址查找对应的页表项，不存在时为其分配各级页表。
 
-其中使用了set_page_ref()、page2pa()、memset()、pte_create()
+其中使用了set_page_ref()、page2pa()、memset()、pte_create()函数和PDX1()、alloc_page()、KADDR()、PDE_ADDR()、PDX0()等宏。
+
+## free_pages()
+
+default_pmm.c中定义的释放内存页的函数
+
+## check_content_access()
+
+调用_fifo_check_swap()，通过判断pgfault_num的值测试页面换入换出是否正常
+
+
+当发生CAUSE_LOAD_ACCESS或CAUSE_STORE_ACCESS的异常时，调用pgfault_handler()，当存在内存管理器check_mm_struct时，调用do_pgfault()。
+
+调用find_vma()尝试找到包含了发生错误的虚拟地址的vma，将pgfault_num计数加一，更新PTE的权限标志位，使用ROUNDDOWN()取得虚拟地址对应的页首地址。尝试使用get_pte找到这个地址对应的页表项，否则创建。
