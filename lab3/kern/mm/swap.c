@@ -196,10 +196,10 @@ assert(total == nr_free_pages());                           //确保遍历出来
      extern struct mm_struct *check_mm_struct;              
      assert(check_mm_struct == NULL);
 
-     check_mm_struct = mm;                                  //上面五句的作用是？
-
+     check_mm_struct = mm;                                  //上面4句的作用是？
+ 
      pde_t *pgdir = mm->pgdir = boot_pgdir;                 //pdgir和mm->pgdir赋值为页表的虚拟地址
-     assert(pgdir[0] == 0);
+     assert(pgdir[0] == 0);                                 //对应三级页表的起始地址0xFFFFFFFFC0200000
 
      struct vma_struct *vma = vma_create(BEING_CHECK_VALID_VADDR, CHECK_VALID_VADDR, VM_WRITE | VM_READ);
      assert(vma != NULL);                                   //新建一个描述虚拟地址的vma
