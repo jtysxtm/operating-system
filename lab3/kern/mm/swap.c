@@ -120,7 +120,7 @@ swap_out(struct mm_struct *mm, int n, int in_tick)
 int
 swap_in(struct mm_struct *mm, uintptr_t addr, struct Page **ptr_result)
 {
-     struct Page *result = alloc_page();
+     struct Page *result = alloc_page();//可能调用swap_out()
      assert(result!=NULL);
 
      pte_t *ptep = get_pte(mm->pgdir, addr, 0);
@@ -181,44 +181,44 @@ check_swap(void)
     //backup mem env
      int ret, count = 0, total = 0, i;
      list_entry_t *le = &free_list;
-     while ((le = list_next(le)) != &free_list) {
+while ((le = list_next(le)) != &free_list) {                //遍历空闲链表，更新count和total   
         struct Page *p = le2page(le, page_link);
         assert(PageProperty(p));
         count ++, total += p->property;
      }
-     assert(total == nr_free_pages());
+assert(total == nr_free_pages());                           //确保遍历出来的总容量等于当前空闲内存         
      cprintf("BEGIN check_swap: count %d, total %d\n",count,total);
      
-     //now we set the phy pages env     
-     struct mm_struct *mm = mm_create();
+     //now we set the phy pages env                         //开始设置物理页环境
+     struct mm_struct *mm = mm_create();                    //声明一个mm_struct管理多个页表的信息
      assert(mm != NULL);
 
-     extern struct mm_struct *check_mm_struct;
+     extern struct mm_struct *check_mm_struct;              
      assert(check_mm_struct == NULL);
 
-     check_mm_struct = mm;
+     check_mm_struct = mm;                                  //上面五句的作用是？
 
-     pde_t *pgdir = mm->pgdir = boot_pgdir;
+     pde_t *pgdir = mm->pgdir = boot_pgdir;                 //pdgir和mm->pgdir赋值为页表的虚拟地址
      assert(pgdir[0] == 0);
 
      struct vma_struct *vma = vma_create(BEING_CHECK_VALID_VADDR, CHECK_VALID_VADDR, VM_WRITE | VM_READ);
-     assert(vma != NULL);
+     assert(vma != NULL);                                   //新建一个描述虚拟地址的vma
 
-     insert_vma_struct(mm, vma);
+     insert_vma_struct(mm, vma);                            //把新建的vma对应地址插入到mm中
 
      //setup the temp Page Table vaddr 0~4MB
      cprintf("setup Page Table for vaddr 0X1000, so alloc a page\n");
      pte_t *temp_ptep=NULL;
      temp_ptep = get_pte(mm->pgdir, BEING_CHECK_VALID_VADDR, 1);
-     assert(temp_ptep!= NULL);
+     assert(temp_ptep!= NULL);                              //查找页表虚拟地址对应的页表项，如果不存在这个页表项，会为它分配各级的页表
      cprintf("setup Page Table vaddr 0~4MB OVER!\n");
      
-     for (i=0;i<CHECK_VALID_PHY_PAGE_NUM;i++) {
+     for (i=0;i<CHECK_VALID_PHY_PAGE_NUM;i++) {             //为每一个页表分配空间
           check_rp[i] = alloc_page();
           assert(check_rp[i] != NULL );
           assert(!PageProperty(check_rp[i]));
      }
-     list_entry_t free_list_store = free_list;
+     list_entry_t free_list_store = free_list;              
      list_init(&free_list);
      assert(list_empty(&free_list));
      
