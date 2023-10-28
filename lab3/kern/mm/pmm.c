@@ -53,14 +53,18 @@ struct Page *alloc_pages(size_t n) {
     bool intr_flag;
 
     while (1) {
+        //关闭中断避免mm结构变动时被中断打断，导致数据错误
         local_intr_save(intr_flag);
         { page = pmm_manager->alloc_pages(n); }
+        //恢复中断控制位
         local_intr_restore(intr_flag);
-
+        //分配成功、不是缺页异常时调用的、没有开启swap模式都跳出循环
         if (page != NULL || n > 1 || swap_init_ok == 0) break;
 
         extern struct mm_struct *check_mm_struct;
         // cprintf("page %x, call swap_out in alloc_pages %d\n",page, n);
+        //尝试将某一物理页置换到swap交换组中来空出一个新的物理页
+        //成功则可以在下一次循环中正常分配空闲物理页
         swap_out(check_mm_struct, n, 0);
     }
     // cprintf("n %d,get page %x, No %d in alloc_pages\n",n,page,(page-pages));
@@ -368,14 +372,20 @@ void tlb_invalidate(pde_t *pgdir, uintptr_t la) { flush_tlb(); }
 //                  - allocate a page size memory & setup an addr map
 //                  - pa<->la with linear address la and the PDT pgdir
 struct Page *pgdir_alloc_page(pde_t *pgdir, uintptr_t la, uint32_t perm) {
+    //分配一个新的物理页用于映射
     struct Page *page = alloc_page();
     if (page != NULL) {
+        //分配成功，尝试建立映射关系
         if (page_insert(pgdir, page, la, perm) != 0) {
+            //映射失败，释放
             free_page(page);
             return NULL;
         }
+        //swap初始化
         if (swap_init_ok) {
+            //将映射的这个物理页设置为可交换
             swap_map_swappable(check_mm_struct, la, page, 0);
+            //设置其对应的虚拟地址
             page->pra_vaddr = la;
             assert(page_ref(page) == 1);
             // cprintf("get No. %d  page: pra_vaddr %x, pra_link.prev %x,

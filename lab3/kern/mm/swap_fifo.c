@@ -41,7 +41,7 @@ _fifo_init_mm(struct mm_struct *mm)
 /*
  * (3)_fifo_map_swappable: According FIFO PRA, we should link the most recent arrival page at the back of pra_list_head qeueue
  */
-static int                                          //把最近到达的页Page链接到FIFO链表末尾
+static int//把最近到达的页Page链接到FIFO链表末尾
 _fifo_map_swappable(struct mm_struct *mm, uintptr_t addr, struct Page *page, int swap_in)
 {
     list_entry_t *head=(list_entry_t*) mm->sm_priv; 

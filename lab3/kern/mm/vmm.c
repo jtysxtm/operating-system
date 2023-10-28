@@ -339,17 +339,19 @@ do_pgfault(struct mm_struct *mm, uint_t error_code, uintptr_t addr) {
         cprintf("not valid addr %x, and  can not find it in vma\n", addr);
         goto failed;
     }
-
+    //确定是缺页异常
     /* IF (write an existed addr ) OR
      *    (write an non_existed addr && addr is writable) OR
      *    (read  an non_existed addr && addr is readable)
      * THEN
      *    continue process
      */
+    //构造设置的缺失的页表项的权限
     uint32_t perm = PTE_U;
     if (vma->vm_flags & VM_WRITE) {
         perm |= (PTE_R | PTE_W);
     }
+    //获取缺失的页表项的虚拟地址，页面对齐
     addr = ROUNDDOWN(addr, PGSIZE);
 
     ret = -E_NO_MEM;
@@ -373,16 +375,19 @@ do_pgfault(struct mm_struct *mm, uint_t error_code, uintptr_t addr) {
     *
     */
 
-
+    //获取该虚拟地址在mm所关联的页表中的页表项
     ptep = get_pte(mm->pgdir, addr, 1);  //(1) try to find a pte, if pte's
                                          //PT(Page Table) isn't existed, then
                                          //create a PT.
+    //全为0说明之前不存在该页表项需要设置对应的数据，建立虚拟地址和物理地址间的映射                                     
     if (*ptep == 0) {
+        //在mm关联的页表中该虚拟地址对应的页表项与一个新分配的物理页进行地址映射
         if (pgdir_alloc_page(mm->pgdir, addr, perm) == NULL) {
             cprintf("pgdir_alloc_page in do_pgfault failed\n");
             goto failed;
         }
     } else {
+        //不是全为0说明该页只是被暂时交换到了磁盘上
         /*LAB3 EXERCISE 3: YOUR CODE
         * 请你根据以下信息提示，补充函数
         * 现在我们认为pte是一个交换条目，那我们应该从磁盘加载数据并放到带有phy addr的页面，
