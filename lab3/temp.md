@@ -20,15 +20,11 @@
 * `page_insert(pde_t *pgdir,struct Page *page,uintptr_t la,uint32_t perm)`：用于建立 `page`对应物理地址与 `la`之间的映射关系，设置物理页 `page`的引用次数，若存在该虚拟地址与其他物理页的映射关系，调用 `page_remove_pte()`删除对应映射。调用 `pte_create()`构造页表项，刷新TLB。
 * `swap_map_swappable(struct mm_struc *mm,uintptr_t addr,struct Page *page,int swap_in)`：本过程中调用的是swap_fifo.c中的 `_fifo_map_swappable()`，将 `page`连接到内存管理器中存储的FIFO队列的head端
 * `pgdir_alloc_page(pde_t* pgdir,uintptr_t la,uint32_t perm)`：声明一个新的物理页用于虚拟地址的映射。调用 `alloc_page()`成功后，调用 `page_insert()`建立映射关系，在确定swap初始化后调用 `swap_map_swappable()`设置物理页为可交换，即加入FIFO队列头。
-* `swap_int()：
-
-## _fifo_map_swappable
-
-存在于swap_map_swappable()，在do_pgfault()中被pgdir_alloc_page()调用，将传递的参数page页连接到内存管理器中存储的FIFO队列head端。
-
-## \_fifo_swap_out_victim
-
-存在于swap.c的swap_out()中，把FIFO队列尾端的元素删除，并将删除的页的地址赋值给ptr_page。
+* `swapfs_read(swap_entry_t entry,struct Page *page)`：从磁盘中的某一扇区开始的N个连续扇区中读取数据，写入 `page`对应的地址中。
+* `swap_in(struct mm_struct *mm,uintptr_t addr,struct Page **ptr_result)`：调用 `swapfs_read()`从磁盘中读入 `addr `对应的物理页的数据，写入声明分配得到的一个新物理页中，将 `ptr_result`指向这个物理页。
+* `swapfs_write(swap_entry_t entry,struct Page *page)`：向磁盘中的某一扇区开始的N个连续扇区写入 `page`对应的地址开始的数据。
+* `swap_out_victim(struct mm_struct *mm,struct Page **ptr_page,int in_tick)`：本过程中调用的是swap_fifo.c中的 `_fifo_swap_out_victim()`，把FIFO队列尾端的元素删除，并将删除的页的地址赋值给 `ptr_page`。
+* `swap_out(struct mm_struct *mm,int n,int in_tick)`：将内存管理器mm中某些内存页从内存中换出到磁盘。调用 `swap_out_victim()`得到要被换出的物理页，将该物理页写入磁盘，设置对应虚拟地址页表项，释放原物理页，刷新TLB。
 
 ## nr_free_pages()
 

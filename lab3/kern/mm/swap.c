@@ -88,30 +88,37 @@ swap_out(struct mm_struct *mm, int n, int in_tick)
           //struct Page **ptr_page=NULL;
           struct Page *page;
           // cprintf("i %d, SWAP: call swap_out_victim\n",i);
+          //找到应该被换出的那个页面
           int r = sm->swap_out_victim(mm, &page, in_tick);
           if (r != 0) {
-                    cprintf("i %d, swap_out: call swap_out_victim failed\n",i);
-                  break;
+               cprintf("i %d, swap_out: call swap_out_victim failed\n",i);
+               break;
           }          
           //assert(!PageReserved(page));
 
           //cprintf("SWAP: choose victim page 0x%08x\n", page);
-          
+          //得到该页面的虚拟地址
           v=page->pra_vaddr; 
+          //获得该虚拟地址对应的页表项
           pte_t *ptep = get_pte(mm->pgdir, v, 0);
           assert((*ptep & PTE_V) != 0);
-
+          //向磁盘中写入数据
+          //page->pra_vaddr/PGSIZE+1-----虚拟地址对应的页表项在映射时的索引
           if (swapfs_write( (page->pra_vaddr/PGSIZE+1)<<8, page) != 0) {
-                    cprintf("SWAP: failed to save\n");
-                    sm->map_swappable(mm, v, page, 0);
-                    continue;
+               //写入失败
+               cprintf("SWAP: failed to save\n");
+               //设置为可交换
+               sm->map_swappable(mm, v, page, 0);
+               continue;
           }
           else {
-                    cprintf("swap_out: i %d, store page in vaddr 0x%x to disk swap entry %d\n", i, v, page->pra_vaddr/PGSIZE+1);
-                    *ptep = (page->pra_vaddr/PGSIZE+1)<<8;
-                    free_page(page);
+               cprintf("swap_out: i %d, store page in vaddr 0x%x to disk swap entry %d\n", i, v, page->pra_vaddr/PGSIZE+1);
+               //设置页表项
+               *ptep = (page->pra_vaddr/PGSIZE+1)<<8;
+               //释放换出的页表项对用的物理页
+               free_page(page);
           }
-          
+          //刷新TLB
           tlb_invalidate(mm->pgdir, v);
      }
      return i;
@@ -120,18 +127,20 @@ swap_out(struct mm_struct *mm, int n, int in_tick)
 int
 swap_in(struct mm_struct *mm, uintptr_t addr, struct Page **ptr_result)
 {
+     //分配一个新的物理页
      struct Page *result = alloc_page();//可能调用swap_out()
      assert(result!=NULL);
-
+     //获得addr对应的页表项
      pte_t *ptep = get_pte(mm->pgdir, addr, 0);
      // cprintf("SWAP: load ptep %x swap entry %d to vaddr 0x%08x, page %x, No %d\n", ptep, (*ptep)>>8, addr, result, (result-pages));
-    
+     //从磁盘中读入物理页的数据，写入result
      int r;
      if ((r = swapfs_read((*ptep), result)) != 0)
      {
         assert(r!=0);
      }
      cprintf("swap_in: load disk swap entry %d with swap_page in vadr 0x%x\n", (*ptep)>>8, addr);
+     //把ptr_result指向内存够中的result页结构体
      *ptr_result=result;
      return 0;
 }
@@ -196,7 +205,7 @@ assert(total == nr_free_pages());                           //确保遍历出来
      extern struct mm_struct *check_mm_struct;              
      assert(check_mm_struct == NULL);
 
-     check_mm_struct = mm;                                  //上面4句的作用是？
+     check_mm_struct = mm;                                  
  
      pde_t *pgdir = mm->pgdir = boot_pgdir;                 //pdgir和mm->pgdir赋值为页表的虚拟地址
      assert(pgdir[0] == 0);                                 //对应三级页表的起始地址0xFFFF_FFFF_C020_0000

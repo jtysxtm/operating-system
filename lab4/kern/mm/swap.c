@@ -123,18 +123,20 @@ swap_out(struct mm_struct *mm, int n, int in_tick)
 int
 swap_in(struct mm_struct *mm, uintptr_t addr, struct Page **ptr_result)
 {
+     //分配一个新的物理页
      struct Page *result = alloc_page();
      assert(result!=NULL);
-
+     //获得addr对应的页表项
      pte_t *ptep = get_pte(mm->pgdir, addr, 0);
      // cprintf("SWAP: load ptep %x swap entry %d to vaddr 0x%08x, page %x, No %d\n", ptep, (*ptep)>>8, addr, result, (result-pages));
-    
+     //从磁盘中读入物理页数据，写入result
      int r;
      if ((r = swapfs_read((*ptep), result)) != 0)
      {
         assert(r!=0);
      }
      cprintf("swap_in: load disk swap entry %d with swap_page in vadr 0x%x\n", (*ptep)>>8, addr);
+     //把ptr_result指向物理页中的result页结构体
      *ptr_result=result;
      return 0;
 }
