@@ -30,6 +30,7 @@ list_entry_t pra_list_head, *curr_ptr;
  * (2) _fifo_init_mm: init pra_list_head and let  mm->sm_priv point to the addr of pra_list_head.
  *              Now, From the memory control struct mm_struct, we can access FIFO PRA
  */
+// 初始化FIFO页面置换算法
 static int
 _clock_init_mm(struct mm_struct *mm)
 {     
@@ -47,6 +48,7 @@ _clock_init_mm(struct mm_struct *mm)
 /*
  * (3)_fifo_map_swappable: According FIFO PRA, we should link the most recent arrival page at the back of pra_list_head qeueue
  */
+ //页面标记为可替换
 static int
 _clock_map_swappable(struct mm_struct *mm, uintptr_t addr, struct Page *page, int swap_in)
 {
@@ -61,16 +63,17 @@ _clock_map_swappable(struct mm_struct *mm, uintptr_t addr, struct Page *page, in
     // 将页面的visited标志置为1，表示该页面已被访问
     
     // 获取链表头
-    list_entry_t *head=(list_entry_t*) mm->sm_priv;
+    list_entry_t *head = mm->sm_priv;
     // 将页面page插入到页面链表pra_list_head的末尾
     list_add(head, entry);
     //将页面的visited标志置为1，表示该页面已被访问
-    page-> visited = 1;
+    page->visited = 1;
     //更新curr的位置
     curr_ptr = entry;
     // 获取page对应的pte 并标记pte中的PTE_A标志位
 //    pte_t *pte = get_pte(mm->pgdir,addr,0);
 //    *pte |= PTE_A;
+    cprintf("curr_ptr %p\n", curr_ptr);
     return 0;
 }
 /*
@@ -81,7 +84,7 @@ static int
 _clock_swap_out_victim(struct mm_struct *mm, struct Page ** ptr_page, int in_tick)
 {
      list_entry_t *head=(list_entry_t*) mm->sm_priv;
-         assert(head != NULL);
+     assert(head != NULL);
      assert(in_tick==0);
      /* Select the victim */
      //(1)  unlink the  earliest arrival page in front of pra_list_head qeueue
@@ -96,6 +99,7 @@ _clock_swap_out_victim(struct mm_struct *mm, struct Page ** ptr_page, int in_tic
         // 如果当前页面已被访问，则将visited标志置为0，表示该页面已被重新访问
         list_entry_t *entry = list_prev(tmp);
         struct Page *p = le2page(entry, pra_page_link);
+
          if (p-> visited == 0)
         {
             list_del(entry);
@@ -113,6 +117,7 @@ _clock_swap_out_victim(struct mm_struct *mm, struct Page ** ptr_page, int in_tic
     }
     return 0;
 }
+//检查FIFO算法的页面替换操作是否正确
 static int
 _clock_check_swap(void) {
 #ifdef ucore_test

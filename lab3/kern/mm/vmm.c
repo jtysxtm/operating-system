@@ -415,7 +415,7 @@ do_pgfault(struct mm_struct *mm, uint_t error_code, uintptr_t addr) {
             ret=swap_in(mm,addr,&page);
             if(ret!=0)
             {
-                cprintf("swap failed\n");
+                cprintf("swap_in failed\n");
                goto failed;                 
             }
             // 交换成功，则建立物理地址<--->虚拟地址映射，并将页设置为可交换的
