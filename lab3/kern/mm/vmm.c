@@ -35,6 +35,7 @@
 */
 
 // szx func : print_vma and print_mm
+// 打印虚拟内存区域（VMA）的相关信息，包括所属的mm_struct、起始地址、结束地址和标志等
 void print_vma(char *name, struct vma_struct *vma){
 	cprintf("-- %s print_vma --\n", name);
 	cprintf("   mm_struct: %p\n",vma->vm_mm);
@@ -43,6 +44,7 @@ void print_vma(char *name, struct vma_struct *vma){
 	cprintf("   list_entry_t: %p\n",&vma->list_link);
 }
 
+// 打印内存管理结构（mm_struct）的相关信息，包括内存映射链表、映射计数等，并调用print_vma打印每个VMA的信息。
 void print_mm(char *name, struct mm_struct *mm){
 	cprintf("-- %s print_mm --\n",name);
 	cprintf("   mmap_list: %p\n",&mm->mmap_list);
@@ -59,6 +61,7 @@ static void check_vma_struct(void);
 static void check_pgfault(void);
 
 // mm_create -  alloc a mm_struct & initialize it.
+// 分配并初始化一个mm_struct结构体，设置相关字段，包括内存映射链表、映射缓存、页目录等。
 struct mm_struct *
 mm_create(void) {
     struct mm_struct *mm = kmalloc(sizeof(struct mm_struct));
@@ -76,6 +79,7 @@ mm_create(void) {
 }
 
 // vma_create - alloc a vma_struct & initialize it. (addr range: vm_start~vm_end)
+// 分配并初始化一个vma_struct结构体，设置起始地址、结束地址和标志等。
 struct vma_struct *
 vma_create(uintptr_t vm_start, uintptr_t vm_end, uint_t vm_flags) {
     struct vma_struct *vma = kmalloc(sizeof(struct vma_struct));
@@ -90,6 +94,7 @@ vma_create(uintptr_t vm_start, uintptr_t vm_end, uint_t vm_flags) {
 
 
 // find_vma - find a vma  (vma->vm_start <= addr <= vma_vm_end)
+// 在给定的mm_struct中查找包含指定地址的VMA，返回找到的VMA结构体。
 struct vma_struct *
 find_vma(struct mm_struct *mm, uintptr_t addr) {
     struct vma_struct *vma = NULL;
@@ -118,6 +123,7 @@ find_vma(struct mm_struct *mm, uintptr_t addr) {
 
 
 // check_vma_overlap - check if vma1 overlaps vma2 ?
+// 检查两个VMA是否有重叠部分。
 static inline void
 check_vma_overlap(struct vma_struct *prev, struct vma_struct *next) {
     assert(prev->vm_start < prev->vm_end);
@@ -127,6 +133,7 @@ check_vma_overlap(struct vma_struct *prev, struct vma_struct *next) {
 
 
 // insert_vma_struct -insert vma in mm's list link
+// 将一个VMA插入到给定mm_struct的内存映射链表中，按照地址排序。
 void
 insert_vma_struct(struct mm_struct *mm, struct vma_struct *vma) {
     assert(vma->vm_start < vma->vm_end);
@@ -159,6 +166,7 @@ insert_vma_struct(struct mm_struct *mm, struct vma_struct *vma) {
 }
 
 // mm_destroy - free mm and mm internal fields
+// 释放mm_struct结构体及其相关的VMA结构体。
 void
 mm_destroy(struct mm_struct *mm) {
 
@@ -173,12 +181,14 @@ mm_destroy(struct mm_struct *mm) {
 
 // vmm_init - initialize virtual memory management
 //          - now just call check_vmm to check correctness of vmm
+// 虚拟内存管理的初始化函数，调用check_vmm检查VMM的正确性。
 void
 vmm_init(void) {
     check_vmm();
 }
 
 // check_vmm - check correctness of vmm
+// 检查VMM的正确性，包括检查vma_struct和页错误处理函数的正确性。
 static void
 check_vmm(void) {
     size_t nr_free_pages_store = nr_free_pages();
@@ -191,6 +201,7 @@ check_vmm(void) {
     cprintf("check_vmm() succeeded.\n");
 }
 
+//检查vma_struct的正确性，包括创建、插入和查找VMA，并验证相关的断言。
 static void
 check_vma_struct(void) {
     size_t nr_free_pages_store = nr_free_pages();
@@ -256,6 +267,7 @@ check_vma_struct(void) {
 struct mm_struct *check_mm_struct;
 
 // check_pgfault - check correctness of pgfault handler
+// 检查页错误处理函数的正确性，包括创建VMA、写入和读取数据，并验证相关的断言。
 static void
 check_pgfault(void) {
 	// char *name = "check_pgfault";
@@ -304,6 +316,7 @@ check_pgfault(void) {
     cprintf("check_pgfault() succeeded!\n");
 }
 //page fault number
+// 记录缺页异常的次数
 volatile unsigned int pgfault_num=0;
 
 /* do_pgfault - interrupt handler to process the page fault execption
@@ -327,14 +340,17 @@ volatile unsigned int pgfault_num=0;
  *         -- The U/S flag (bit 2) indicates whether the processor was executing at user mode (1)
  *            or supervisor mode (0) at the time of the exception.
  */
+// mm表示进程的内存管理结构，error_code表示错误码，addr表示引起缺页异常的虚拟地址
 int
 do_pgfault(struct mm_struct *mm, uint_t error_code, uintptr_t addr) {
     int ret = -E_INVAL;
     //try to find a vma which include addr
+    // 查找虚拟地址所在的VMA（虚拟内存区域）结构体
     struct vma_struct *vma = find_vma(mm, addr);
-
+    // 增加缺页异常计数
     pgfault_num++;
     //If the addr is in the range of a mm's vma?
+    // 如果找不到对应的VMA，或者虚拟地址不在任何VMA的范围内，就打印错误信息并跳转到failed标签
     if (vma == NULL || vma->vm_start > addr) {
         cprintf("not valid addr %x, and  can not find it in vma\n", addr);
         goto failed;
@@ -347,6 +363,7 @@ do_pgfault(struct mm_struct *mm, uint_t error_code, uintptr_t addr) {
      *    continue process
      */
     //构造设置的缺失的页表项的权限
+    // 如果VMA是可写的，就将perm的PTE_R和PTE_W位置为1。将虚拟地址按页面大小PGSIZE（4KB）对齐
     uint32_t perm = PTE_U;
     if (vma->vm_flags & VM_WRITE) {
         perm |= (PTE_R | PTE_W);
@@ -386,7 +403,7 @@ do_pgfault(struct mm_struct *mm, uint_t error_code, uintptr_t addr) {
             cprintf("pgdir_alloc_page in do_pgfault failed\n");
             goto failed;
         }
-    } else {
+    } else { // 如果页表项不为空，说明这个虚拟地址之前已经对应了一个物理页，但是这个物理页可能被换出到磁盘上了
         //不是全为0说明该页只是被暂时交换到了磁盘上
         /*LAB3 EXERCISE 3: YOUR CODE
         * 请你根据以下信息提示，补充函数
@@ -412,7 +429,7 @@ do_pgfault(struct mm_struct *mm, uint_t error_code, uintptr_t addr) {
             //logical addr
             //(3) make the page swappable.
             // 交换失败
-            ret=swap_in(mm,addr,&page);
+            ret=swap_in(mm,addr,&page);//调用swap_in函数从磁盘上读取数据
             if(ret!=0)
             {
                 cprintf("swap_in failed\n");
@@ -420,7 +437,7 @@ do_pgfault(struct mm_struct *mm, uint_t error_code, uintptr_t addr) {
             }
             // 交换成功，则建立物理地址<--->虚拟地址映射，并将页设置为可交换的
             page_insert(mm->pgdir, page, addr, perm);
-            swap_map_swappable(mm, addr, page, 1);
+            swap_map_swappable(mm, addr, page, 1);//将物理页设置为可交换状态
             page->pra_vaddr = addr;
         } else {
             cprintf("no swap_init_ok but ptep is %x, failed\n", *ptep);

@@ -30,7 +30,7 @@ list_entry_t pra_list_head, *curr_ptr;
  * (2) _fifo_init_mm: init pra_list_head and let  mm->sm_priv point to the addr of pra_list_head.
  *              Now, From the memory control struct mm_struct, we can access FIFO PRA
  */
-// 初始化FIFO页面置换算法
+// 初始化页面置换算法
 static int
 _clock_init_mm(struct mm_struct *mm)
 {     
@@ -117,7 +117,7 @@ _clock_swap_out_victim(struct mm_struct *mm, struct Page ** ptr_page, int in_tic
     }
     return 0;
 }
-//检查FIFO算法的页面替换操作是否正确
+//检查算法的页面替换操作是否正确
 static int
 _clock_check_swap(void) {
 #ifdef ucore_test
