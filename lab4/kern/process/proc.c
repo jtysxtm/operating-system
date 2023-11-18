@@ -189,7 +189,7 @@ proc_run(struct proc_struct *proc) {
         //current = proc;
         load_esp0(current->kstack + KSTACKSIZE);
         lcr3(current->cr3);
-        switch_to(&(current->context),&(proc->context);
+        switch_to(&(current->context),&(proc->context));
         current = proc;
         local_intr_restore(intr_flag);
 
