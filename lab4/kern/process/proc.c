@@ -188,7 +188,7 @@ proc_run(struct proc_struct *proc) {
         struct proc_struct * temp = current;
         current = proc;
         lcr3(current->cr3);
-        switch_to(&(current->context),&(proc->context));
+        switch_to(&(temp->context),&(proc->context));
         local_intr_restore(intr_flag);
 
     }
@@ -331,9 +331,9 @@ do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf) {
     
     copy_thread(proc, stack, tf);
 
-    hash_proc(proc);
-
+    
     proc->pid = get_pid();
+    hash_proc(proc);
     list_add(&proc_list,&(proc->list_link));
     nr_process ++;
 
@@ -415,7 +415,6 @@ proc_init(void) {
     if (pid <= 0) {
         panic("create init_main failed.\n");
     }
-
     initproc = find_proc(pid);
     set_proc_name(initproc, "init");
 
