@@ -185,12 +185,10 @@ proc_run(struct proc_struct *proc) {
         */
         bool intr_flag;
         local_intr_save(intr_flag);
-        //struct proc_struct * temp = current;
-        //current = proc;
-        load_esp0(current->kstack + KSTACKSIZE);
-        lcr3(current->cr3);
-        switch_to(&(current->context),&(proc->context);
+        struct proc_struct * temp = current;
         current = proc;
+        lcr3(current->cr3);
+        switch_to(&(temp->context),&(proc->context);
         local_intr_restore(intr_flag);
 
     }
