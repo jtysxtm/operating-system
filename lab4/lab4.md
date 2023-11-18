@@ -37,6 +37,92 @@ kernel_thread函数通过调用**do_fork**函数完成具体内核线程的创�
 
 - 请说明ucore是否做到给每个新fork的线程一个唯一的id？请说明你的分析和理由。
 
+### do_fork函数实现过程
+```c
+int do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf) {
+    int ret = -E_NO_FREE_PROC;
+    struct proc_struct *proc;
+
+    // 检查当前进程数量是否超过最大进程数量限制
+    if (nr_process >= MAX_PROCESS) {
+        goto fork_out;//跳转到fork_out
+    }
+
+    ret = -E_NO_MEM;//在发生内存分配失败时可以返回适当的错误码
+
+    // 分配一个进程控制块
+    proc = alloc_proc();
+    if(proc==NULL)//分配失败
+        goto fork_out;  
+
+    // 设置当前进程为新进程的父进程
+    proc->parent = current;
+
+    // 为新进程分配内核栈
+    if(setup_kstack(proc))
+        goto bad_fork_cleanup_kstack;//跳转进行清理
+
+    //复 制进程的内存布局信息，以确保新进程拥有与原进程相同的内存环境
+    if(copy_mm(clone_flags,proc))
+        goto bad_fork_cleanup_proc;//失败则进行清理
+    
+    // 复制原进程的上下文到新进程
+    copy_thread(proc, stack, tf);
+
+    // 为新进程分配一个唯一的进程号
+    proc->pid = get_pid();
+
+    // 将新进程添加到进程列表
+    hash_proc(proc);
+    list_add(&proc_list,&(proc->list_link));
+    nr_process ++;//更新进程数量计数器
+
+    // 唤醒新进程，进入可调度状态
+    wakeup_proc(proc);
+    
+    // 返回新进程号pid
+    ret = proc->pid;
+
+fork_out:
+    return ret;
+
+bad_fork_cleanup_kstack:
+    put_kstack(proc);
+bad_fork_cleanup_proc:
+    kfree(proc);
+    goto fork_out;
+}
+```
+do_fork函数的实现流程如下：
+1. 检查当前进程数量是否已经达到最大限制（MAX_PROCESS），如果超过则直接跳转到fork_out标签处，返回-E_NO_FREE_PROC。
+
+2. 设置返回值为-E_NO_MEM，以便在发生内存分配失败时可以返回适当的错误码。
+
+3. 调用alloc_proc函数来分配一个进程控制块（proc_struct），并将返回的指针保存在proc变量中。如果分配失败，则直接跳转到fork_out标签处，返回-E_NO_MEM。
+
+4. 将新进程的父进程指针指向当前进程。
+
+5. 调用setup_kstack函数为新进程分配内核栈空间，如果失败则跳转到bad_fork_cleanup_kstack标签处进行清理工作。
+
+6. 调用copy_mm函数复制原进程的内存管理信息到新进程，这一步骤是复制进程的内存布局信息，以确保新进程拥有与原进程相同的内存环境。如果失败，则跳转到bad_fork_cleanup_proc标签处进行清理工作。
+
+7. 调用copy_thread函数复制原进程的上下文到新进程，包括栈和 trapframe。
+
+8. 为新进程分配一个唯一的进程号（pid），调用get_pid函数实现此目的。
+
+9. 将新进程添加到进程列表，并更新进程数量计数器。
+
+10. 唤醒新进程，使其进入可调度状态。
+
+11. 返回新进程的pid作为函数的返回值。
+
+12. 通过调用get_pid()函数为新进程分配一个唯一的pid。该函数实现了一个简单的计数器，并通过自增操作返回一个唯一的值作为pid。
+
+基于上述代码可知，ucore在每次创建新的内核线程时候，都会通过调用get_pid函数为新进程分配了一个唯一的pid，并将其赋值给新进程的proc->pid字段，以保证每个新fork的线程具有唯一的pid。
+
+
+
+
 ## 练习3：编写proc_run 函数（需要编码）
 proc_run用于将指定的进程切换到CPU上运行。它的大致执行步骤包括：
 

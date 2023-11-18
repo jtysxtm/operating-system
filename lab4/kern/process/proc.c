@@ -287,10 +287,13 @@ int
 do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf) {
     int ret = -E_NO_FREE_PROC;
     struct proc_struct *proc;
+
+    // 检查当前进程数量是否超过最大进程数量限制
     if (nr_process >= MAX_PROCESS) {
-        goto fork_out;
+        goto fork_out;//跳转到fork_out
     }
-    ret = -E_NO_MEM;
+
+    ret = -E_NO_MEM;//在发生内存分配失败时可以返回适当的错误码
     //LAB4:EXERCISE2 YOUR CODE
     /*
      * Some Useful MACROs, Functions and DEFINEs, you can use them in below implementation.
@@ -317,28 +320,37 @@ do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf) {
     //    6. call wakeup_proc to make the new child process RUNNABLE
     //    7. set ret vaule using child proc's pid
 
+    // 分配一个进程控制块
     proc = alloc_proc();
-    if(proc==NULL)
+    if(proc==NULL)//分配失败
         goto fork_out;  
 
+    // 设置当前进程为新进程的父进程
     proc->parent = current;
 
+    // 为新进程分配内核栈
     if(setup_kstack(proc))
-        goto bad_fork_cleanup_kstack;
+        goto bad_fork_cleanup_kstack;//跳转进行清理
 
+    // 复制进程的内存布局信息，以确保新进程拥有与原进程相同的内存环境
     if(copy_mm(clone_flags,proc))
-        goto bad_fork_cleanup_proc;
+        goto bad_fork_cleanup_proc;//失败则进行清理
     
+    // 复制原进程的上下文到新进程
     copy_thread(proc, stack, tf);
 
-    
+    // 为新进程分配一个唯一的进程号
     proc->pid = get_pid();
+
+    // 将新进程添加到进程列表
     hash_proc(proc);
     list_add(&proc_list,&(proc->list_link));
-    nr_process ++;
+    nr_process ++;//更新进程数量计数器
 
+    // 唤醒新进程，进入可调度状态
     wakeup_proc(proc);
-
+    
+    // 返回新进程号pid
     ret = proc->pid;
 
 fork_out:
