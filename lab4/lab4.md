@@ -69,7 +69,7 @@ copy_thread(struct proc_struct *proc, uintptr_t esp, struct trapframe *tf) {
 }
 ```
 
-在 `kernel_thread()`和 `copy_thread()`中我们可以观察到函数对tf和context的操作。作为proc_struct结构体的组成，context保存了前一个进程的上下文信息，即被调用者保存寄存器的值，这使得uCore能够在内核态中也实现上下文切换与进程调度；tf是指向中断帧的指针，当进程从用户空间跳转到内核空间以及在内核态创建新线程时都需要通过记录了中断前状态的中断帧来恢复各寄存器的值，从而使进程能够继续执行。
+在 `kernel_thread()`和 `copy_thread()`中我们可以观察到函数对tf和context的操作。作为proc_struct结构体的组成，context保存了前一个进程的上下文信息，即被调用者保存寄存器的值，这使得uCore能够在内核态中也实现上下文切换与进程调度；tf是指向中断帧的指针，当进程从用户空间跳转到内核空间以及在内核态创建新线程时都需要通过记录了中断前状态的中断帧来恢复各寄存器的值，从而使进程继续执行。
 
 ## 练习2：为新创建的内核线程分配资源（需要编码）
 
