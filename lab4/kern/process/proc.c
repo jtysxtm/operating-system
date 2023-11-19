@@ -102,18 +102,18 @@ alloc_proc(void) {
      *       uint32_t flags;                             // Process flag
      *       char name[PROC_NAME_LEN + 1];               // Process name
      */
-        proc->state = PROC_UNINIT;
-        proc->pid = -1;
-        proc->runs = 0;
-        proc->kstack = 0;
-        proc->need_resched = 0;
-        proc->parent = NULL;
-        proc->mm = NULL;
-        memset(&(proc->context), 0, sizeof(struct context));
-        proc->tf = NULL;
-        proc->cr3 = boot_cr3;
-        proc->flags = 0;
-        memset(proc->name, 0, PROC_NAME_LEN+1);
+        proc->state = PROC_UNINIT;                      //状态为未初始化
+        proc->pid = -1;                                 //pid为未赋值
+        proc->runs = 0;                                 //运行时间为0
+        proc->kstack = 0;                               //除了idleproc其他线程的内核栈都要后续分配
+        proc->need_resched = 0;                         //不需要调度切换线程
+        proc->parent = NULL;                            //没有父线程
+        proc->mm = NULL;                                //未分配内存
+        memset(&(proc->context), 0, sizeof(struct context));//将上下文变量全部赋值为0，清空
+        proc->tf = NULL;                                //初始化没有中断帧
+        proc->cr3 = boot_cr3;                           //内核线程的cr3为boot_cr3，即页目录为内核页目录表
+        proc->flags = 0;                                //标志位为0
+        memset(proc->name, 0, PROC_NAME_LEN+1);         //将线程名变量全部赋值为0，清空
 
     }
     return proc;
@@ -230,10 +230,10 @@ int
 kernel_thread(int (*fn)(void *), void *arg, uint32_t clone_flags) {
     struct trapframe tf;
     memset(&tf, 0, sizeof(struct trapframe));
-    tf.gpr.s0 = (uintptr_t)fn;
-    tf.gpr.s1 = (uintptr_t)arg;
+    tf.gpr.s0 = (uintptr_t)fn;      //函数入口
+    tf.gpr.s1 = (uintptr_t)arg;     //函数参数
     tf.status = (read_csr(sstatus) | SSTATUS_SPP | SSTATUS_SPIE) & ~SSTATUS_SIE;
-    tf.epc = (uintptr_t)kernel_thread_entry;
+    tf.epc = (uintptr_t)kernel_thread_entry;    //epc指向kernel_thread_entry，即执行s0指向的函数
     return do_fork(clone_flags | CLONE_VM, 0, &tf);
 }
 
@@ -267,15 +267,16 @@ copy_mm(uint32_t clone_flags, struct proc_struct *proc) {
 //             - setup the kernel entry point and stack of process
 static void
 copy_thread(struct proc_struct *proc, uintptr_t esp, struct trapframe *tf) {
+    //内核栈上分配一块空间保存tf
     proc->tf = (struct trapframe *)(proc->kstack + KSTACKSIZE - sizeof(struct trapframe));
     *(proc->tf) = *tf;
 
     // Set a0 to 0 so a child process knows it's just forked
-    proc->tf->gpr.a0 = 0;
-    proc->tf->gpr.sp = (esp == 0) ? (uintptr_t)proc->tf : esp;
+    proc->tf->gpr.a0 = 0;               //a0设置为0表示为子进程
+    proc->tf->gpr.sp = (esp == 0) ? (uintptr_t)proc->tf : esp;//esp非空则设置tf栈指针为esp,否则指向自己
 
-    proc->context.ra = (uintptr_t)forkret;
-    proc->context.sp = (uintptr_t)(proc->tf);
+    proc->context.ra = (uintptr_t)forkret;//上下文的ra设置为forkret入口
+    proc->context.sp = (uintptr_t)(proc->tf);//上下文的栈顶放置tf
 }
 
 /* do_fork -     parent process for a new child process
