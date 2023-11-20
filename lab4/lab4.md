@@ -175,7 +175,7 @@ do_fork函数的实现流程如下：
 
 基于上述代码可知，ucore在每次创建新的内核线程时候，都会通过调用get_pid函数为新进程分配一个唯一的pid，并将其赋值给新进程的proc->pid字段，以保证每个新fork的线程具有唯一的pid。
 
-在get_pid函数中，首先判断last_pid如果小于next_safe，则分配的last_pid一定是唯一的。若last_pid大等于next_safe或大于MAX_PID，则需要进一步遍历proc_list重新设置last_pid和next_safe，以便下一次函数调用时正常分配。
+在get_pid函数中，首先判断last_pid如果小于next_safe，则分配的last_pid一定是唯一的。若last_pid大等于next_safe或大于MAX_PID，则需要进一步遍历proc_list重新设置last_pid和next_safe，以便下一次函数循环时正常分配。
 
 ## 练习3：编写proc_run 函数（需要编码）
 
