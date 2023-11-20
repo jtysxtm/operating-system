@@ -126,13 +126,18 @@ int do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf) {
     // 复制原进程的上下文到新进程
     copy_thread(proc, stack, tf);
 
+    //get_pid中的全局变量需要原子性的更改，禁止中断
+    bool intr_flag;
+    local_intr_save(intr_flag);
+
     // 为新进程分配一个唯一的进程号
     proc->pid = get_pid();
 
-    // 将新进程添加到进程列表
+    // 将新进程添加到进程列表，并允许中断
     hash_proc(proc);
-    list_add(&proc_list,&(proc->list_link));
+    list_add(&proc_list,&(proc->list_link));//将proc->list_link加到proc_list后
     nr_process ++;//更新进程数量计数器
+    local_intr_save(intr_flag);
 
     // 唤醒新进程，进入可调度状态
     wakeup_proc(proc);
@@ -160,14 +165,17 @@ do_fork函数的实现流程如下：
 5. 调用setup_kstack函数为新进程分配内核栈空间，如果失败则跳转到bad_fork_cleanup_kstack标签处进行清理工作。
 6. 调用copy_mm函数复制原进程的内存管理信息到新进程，这一步骤是复制进程的内存布局信息，以确保新进程拥有与原进程相同的内存环境。如果失败，则跳转到bad_fork_cleanup_proc标签处进行清理工作。
 7. 调用copy_thread函数复制原进程的上下文到新进程，包括栈和 trapframe。
-8. 为新进程分配一个唯一的进程号（pid），调用get_pid函数实现此目的。
+8. 为新进程分配一个唯一的进程号（pid），调用get_pid函数实现此目的。该函数中含有静态全局变量，需要保证唯一性，避免多个进程同时执行附近操作导致的数值错误，需要将此步骤和下一步部分添加中断，防止同时调度。
 9. 将新进程添加到进程列表，并更新进程数量计数器。
 10. 唤醒新进程，使其进入可调度状态。
 11. 返回新进程的pid作为函数的返回值。
 12. 通过调用get_pid()函数为新进程分配一个唯一的pid。该函数实现了一个简单的计数器，并通过自增操作返回一个唯一的值作为pid。
 
 ### 请说明ucore是否做到给每个新fork的线程一个唯一的id
-基于上述代码可知，ucore在每次创建新的内核线程时候，都会通过调用get_pid函数为新进程分配了一个唯一的pid，并将其赋值给新进程的proc->pid字段，以保证每个新fork的线程具有唯一的pid。
+
+基于上述代码可知，ucore在每次创建新的内核线程时候，都会通过调用get_pid函数为新进程分配一个唯一的pid，并将其赋值给新进程的proc->pid字段，以保证每个新fork的线程具有唯一的pid。
+
+在get_pid函数中，首先判断last_pid如果小于next_safe，则分配的last_pid一定是唯一的。若last_pid大等于next_safe或大于MAX_PID，则需要进一步遍历proc_list重新设置last_pid和next_safe，以便下一次函数调用时正常分配。
 
 ## 练习3：编写proc_run 函数（需要编码）
 
@@ -204,33 +212,37 @@ Type 'help' for a list of commands.
 
 
 ```
+
 ### proc_run函数实现过程
 
-
 ### 在本实验的执行过程中，创建且运行了几个内核线程？
-创建了两个内核线程：idleproc 和 initproc。
-- idleproc 是第一个内核线程，代表空闲状态下的 CPU 运行。它的 pid 被设置为 0，状态为 PROC_RUNNABLE，具有一个指向内核栈的指针 kstack，标志 need_resched 被设置为 1，表示需要进行调度。此外，它的内核栈指向 bootstack，并被命名为 "idle"，用于执行cpu_idle函数。在初始化时，完成新的内核线程创建后进入死循环，用于调度其他进程线程。
 
+创建了两个内核线程：idleproc 和 initproc。
+
+- idleproc 是第一个内核线程，代表空闲状态下的 CPU 运行。它的 pid 被设置为 0，状态为 PROC_RUNNABLE，具有一个指向内核栈的指针 kstack，标志 need_resched 被设置为 1，表示需要进行调度。此外，它的内核栈指向 bootstack，并被命名为 "idle"，用于执行cpu_idle函数。在初始化时，完成新的内核线程创建后进入死循环，用于调度其他进程线程。
 - initproc 是第二个内核线程，通过 kernel_thread 函数创建，执行 init_main 函数。它的 pid 被设置为 1，状态为 PROC_UNINIT（在创建后需要被调度为可运行状态），具有一个指向内核栈的指针 kstack，标志 need_resched 被设置为 1，表示需要进行调度。它的内核栈通过 kernel_thread 函数创建，被命名为 "init"。在 proc_init 函数中，首先初始化了进程链表 proc_list 和哈希表 hash_list。然后通过 alloc_proc 函数分配了 idleproc 的进程结构，并检查了该结构的一些字段的正确性。接下来，设置了 idleproc 的一些属性，如 pid、状态、内核栈等。最后，通过 kernel_thread 函数创建了 initproc，并将其添加到进程链表中。该线程用于调用打印helloworld的线程。
 
 ## 扩展练习 Challenge：
 
 - 说明语句 `local_intr_save(intr_flag);....local_intr_restore(intr_flag);`是如何实现开关中断的？
 
+在练习三中proc_run函数的完善中就使用到了这两个语句。
 
-在  将调用于kern/mm/pmm.c定义的free_pages释放物理页面。
 ```c++
-void free_pages(struct Page *base, size_t n) {//释放一定数量的物理页面
-    bool intr_flag;
-    local_intr_save(intr_flag);//保持中断状态
-    {
-        pmm_manager->free_pages(base, n);//释放相应页面
+void
+proc_run(struct proc_struct *proc) {
+    if (proc != current) {
+        bool intr_flag;
+        local_intr_save(intr_flag);
+	······
+	······
+        local_intr_restore(intr_flag);
     }
-    local_intr_restore(intr_flag);//恢复之前保存的中断状态
 }
+
 ```
 
-其中的`local_intr_save(intr_flag);....local_intr_restore(intr_flag);`在krn/sync/sync.h中定义如下：
+其中的 `local_intr_save(intr_flag);....local_intr_restore(intr_flag);`在krn/sync/sync.h中定义如下：
 
 ```c++
 //kern/sync/sync.h
@@ -275,13 +287,12 @@ void intr_disable(void) {
 local_intr_save(intr_flag);....local_intr_restore(intr_flag);语句块用于保存和恢复中断状态。
 
 - local_intr_save(x)宏定义中，__intr_save()函数被调用来保存当前的中断状态，并将其赋值给变量x。
+
   - __intr_save函数首先通过read_csr(sstatus)读取控制寄存器sstatus的值，并使用位与操作检查其中的SIE位（Supervisor Interrupt Enable）。
   - 如果SIE位为1，表示中断允许，则调用intr_disable()函数关闭中断，并返回1，表示中断状态已被保存；
     - intr_enable函数通过调用set_csr函数，将SSTATUS寄存器的SIE位设置为1，以允许中断触发和响应。
   - 如果SIE位为0，表示中断禁止，则直接返回0，表示中断状态未被保存。
-
 - local_intr_restore(x)宏定义中，__intr_restore(x)函数被调用来恢复之前保存的中断状态。即将变量x的值作为参数传递给__intr_restore()函数，以恢复之前保存的中断状态。
+
   - __intr_restore函数接受一个布尔类型的参数flag，如果flag为真，则调用intr_enable()函数开启中断；否则不执行任何操作。
     - intr_disable函数通过调用clear_csr函数，将SSTATUS寄存器的SIE位清除为0，以禁止中断触发和响应。
-
-

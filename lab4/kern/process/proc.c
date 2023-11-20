@@ -140,15 +140,18 @@ get_pid(void) {
     static_assert(MAX_PID > MAX_PROCESS); //在编译期间确保MAX_PID大于MAX_PROCESS
     struct proc_struct *proc; //进程块
     list_entry_t *list = &proc_list, *le; //指向进程列表的指针，处理当前列表项的指针
-    static int next_safe = MAX_PID, last_pid = MAX_PID;
+    static int next_safe = MAX_PID, last_pid = MAX_PID;//全局静态变量next_safe初始值为最大进程数
     if (++ last_pid >= MAX_PID) {
+        //last_pid第一次赋值为1
         last_pid = 1;
         goto inside; 
     }
     if (last_pid >= next_safe) {
+        //如果last_pid>=next_safe就设置next_safe为MAX_PID
     inside:
         next_safe = MAX_PID;
     repeat:
+        //遍历链表，确保last_pid和现有的进程的PID不相等，更新next_safe
         le = list;
         while ((le = list_next(le)) != list) {
             proc = le2proc(le, list_link);
@@ -352,13 +355,18 @@ do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf) {
     // 复制原进程的上下文到新进程
     copy_thread(proc, stack, tf);
 
+    //get_pid中的全局变量需要原子性的更改，禁止中断
+    bool intr_flag;
+    local_intr_save(intr_flag);
+    
     // 为新进程分配一个唯一的进程号
     proc->pid = get_pid();
 
-    // 将新进程添加到进程列表
+    // 将新进程添加到进程列表，并允许中断
     hash_proc(proc);
     list_add(&proc_list,&(proc->list_link));//将proc->list_link加到proc_list后
     nr_process ++;//更新进程数量计数器
+    local_intr_save(intr_flag);
 
     // 唤醒新进程，进入可调度状态
     wakeup_proc(proc);
