@@ -54,10 +54,16 @@ int
 kernel_thread(int (*fn)(void *), void *arg, uint32_t clone_flags) {
     struct trapframe tf;
     memset(&tf, 0, sizeof(struct trapframe));
-    tf.gpr.s0 = (uintptr_t)fn;      //函数入口
-    tf.gpr.s1 = (uintptr_t)arg;     //函数参数
+    // 设置内核线程的参数和函数指针
+    tf.gpr.s0 = (uintptr_t)fn;      //s0 寄存器保存函数指针、函数入口
+    tf.gpr.s1 = (uintptr_t)arg;     //s1 寄存器保存函数参数
+    // 设置 trapframe 中的 status 寄存器（SSTATUS）
+    // SSTATUS_SPP：Supervisor Previous Privilege（设置为 supervisor 模式，因为这是一个内核线程）
+    // SSTATUS_SPIE：Supervisor Previous Interrupt Enable（设置为启用中断，因为这是一个内核线程）
+    // SSTATUS_SIE：Supervisor Interrupt Enable（设置为禁用中断，因为我们不希望该线程被中断）
     tf.status = (read_csr(sstatus) | SSTATUS_SPP | SSTATUS_SPIE) & ~SSTATUS_SIE;
     tf.epc = (uintptr_t)kernel_thread_entry;    //epc指向kernel_thread_entry，即执行s0指向的函数
+    //// 使用 do_fork 创建一个新进程（内核线程），这样才真正用设置的tf创建新进程
     return do_fork(clone_flags | CLONE_VM, 0, &tf);
 }
 

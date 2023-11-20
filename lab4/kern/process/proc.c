@@ -287,11 +287,12 @@ copy_thread(struct proc_struct *proc, uintptr_t esp, struct trapframe *tf) {
     // Set a0 to 0 so a child process knows it's just forked
     proc->tf->gpr.a0 = 0;  //a0设置为0表示为子进程
     //esp非空则设置tf栈指针为esp,否则指向自己
+    //将线程的栈指针设置为指定的地址
     proc->tf->gpr.sp = (esp == 0) ? (uintptr_t)proc->tf : esp;
 
     //设置上下文信息
     proc->context.ra = (uintptr_t)forkret;//上下文的ra（返回地址）设置为forkret入口
-    proc->context.sp = (uintptr_t)(proc->tf);//上下文的栈顶放置tf
+    proc->context.sp = (uintptr_t)(proc->tf);//将tp放置在上下文的栈顶
 }
 
 /* do_fork -     parent process for a new child process

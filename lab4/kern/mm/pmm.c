@@ -50,11 +50,12 @@ static void init_memmap(struct Page *base, size_t n) {
 // memory
 struct Page *alloc_pages(size_t n) {
     struct Page *page = NULL;
-    bool intr_flag;
+    bool intr_flag;//保存中断标志
 
     while (1) {
         local_intr_save(intr_flag);
         {
+            //分配n个页面，并将返回的指针赋值给page
             page = pmm_manager->alloc_pages(n);
         }
         local_intr_restore(intr_flag);
@@ -63,7 +64,7 @@ struct Page *alloc_pages(size_t n) {
 
         extern struct mm_struct *check_mm_struct;
         // cprintf("page %x, call swap_out in alloc_pages %d\n",page, n);
-        swap_out(check_mm_struct, n, 0);
+        swap_out(check_mm_struct, n, 0);//执行页面换出
     }
     // cprintf("n %d,get page %x, No %d in alloc_pages\n",n,page,(page-pages));
     return page;

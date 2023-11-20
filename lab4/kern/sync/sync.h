@@ -23,8 +23,8 @@ static inline void __intr_restore(bool flag) {
 
 #define local_intr_save(x) \
     do {                   \
-        x = __intr_save(); \
+        x = __intr_save(); \ //保存当前的中断状态，并将其赋值给变量x
     } while (0)
-#define local_intr_restore(x) __intr_restore(x);
+#define local_intr_restore(x) __intr_restore(x); //恢复之前保存的中断状态
 
 #endif /* !__KERN_SYNC_SYNC_H__ */
