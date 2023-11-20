@@ -137,13 +137,13 @@ get_proc_name(struct proc_struct *proc) {
 // get_pid - alloc a unique pid for process
 static int
 get_pid(void) {
-    static_assert(MAX_PID > MAX_PROCESS);
-    struct proc_struct *proc;
-    list_entry_t *list = &proc_list, *le;
+    static_assert(MAX_PID > MAX_PROCESS); //在编译期间确保MAX_PID大于MAX_PROCESS
+    struct proc_struct *proc; //进程块
+    list_entry_t *list = &proc_list, *le; //指向进程列表的指针，处理当前列表项的指针
     static int next_safe = MAX_PID, last_pid = MAX_PID;
     if (++ last_pid >= MAX_PID) {
         last_pid = 1;
-        goto inside;
+        goto inside; 
     }
     if (last_pid >= next_safe) {
     inside:
@@ -152,7 +152,7 @@ get_pid(void) {
         le = list;
         while ((le = list_next(le)) != list) {
             proc = le2proc(le, list_link);
-            if (proc->pid == last_pid) {
+            if (proc->pid == last_pid) { 
                 if (++ last_pid >= next_safe) {
                     if (last_pid >= MAX_PID) {
                         last_pid = 1;
@@ -205,6 +205,9 @@ forkret(void) {
 // hash_proc - add proc into proc hash_list
 static void
 hash_proc(struct proc_struct *proc) {
+    //将proc结构体节点添加到哈希表
+    //pid_hashfn(proc->pid)函数计算出的哈希值来确定存储位置
+    //proc->hash_link添加到对应位置的链表
     list_add(hash_list + pid_hashfn(proc->pid), &(proc->hash_link));
 }
 
@@ -239,18 +242,23 @@ kernel_thread(int (*fn)(void *), void *arg, uint32_t clone_flags) {
 
 // setup_kstack - alloc pages with size KSTACKPAGE as process kernel stack
 static int
-setup_kstack(struct proc_struct *proc) {
+setup_kstack(struct proc_struct *proc) { //为进程分配内核栈
+//调用alloc_pages函数为内核栈分配大小为KSTACKPAGE的页面
     struct Page *page = alloc_pages(KSTACKPAGE);
-    if (page != NULL) {
+    if (page != NULL) {//分配成功
+        //将分配到的页面转换为内核虚拟地址
+        //表示进程的内核栈其实地址
         proc->kstack = (uintptr_t)page2kva(page);
         return 0;
     }
-    return -E_NO_MEM;
+    return -E_NO_MEM;//没有足够内存可用
 }
 
 // put_kstack - free the memory space of process kernel stack
 static void
 put_kstack(struct proc_struct *proc) {
+    //proc->kstack转换为对应的页结构体指针
+    //释放对应的页
     free_pages(kva2page((void *)(proc->kstack)), KSTACKPAGE);
 }
 
@@ -265,17 +273,21 @@ copy_mm(uint32_t clone_flags, struct proc_struct *proc) {
 
 // copy_thread - setup the trapframe on the  process's kernel stack top and
 //             - setup the kernel entry point and stack of process
+//设置进程内核栈和上下文
 static void
 copy_thread(struct proc_struct *proc, uintptr_t esp, struct trapframe *tf) {
     //内核栈上分配一块空间保存tf
+    //tf指向的位置距离栈顶KSTACKSIZE - sizeof(struct trapframe)字节
     proc->tf = (struct trapframe *)(proc->kstack + KSTACKSIZE - sizeof(struct trapframe));
-    *(proc->tf) = *tf;
+    *(proc->tf) = *tf; //传入的tf内容复制到proc->tf指向的内存
 
     // Set a0 to 0 so a child process knows it's just forked
-    proc->tf->gpr.a0 = 0;               //a0设置为0表示为子进程
-    proc->tf->gpr.sp = (esp == 0) ? (uintptr_t)proc->tf : esp;//esp非空则设置tf栈指针为esp,否则指向自己
+    proc->tf->gpr.a0 = 0;  //a0设置为0表示为子进程
+    //esp非空则设置tf栈指针为esp,否则指向自己
+    proc->tf->gpr.sp = (esp == 0) ? (uintptr_t)proc->tf : esp;
 
-    proc->context.ra = (uintptr_t)forkret;//上下文的ra设置为forkret入口
+    //设置上下文信息
+    proc->context.ra = (uintptr_t)forkret;//上下文的ra（返回地址）设置为forkret入口
     proc->context.sp = (uintptr_t)(proc->tf);//上下文的栈顶放置tf
 }
 
@@ -286,8 +298,8 @@ copy_thread(struct proc_struct *proc, uintptr_t esp, struct trapframe *tf) {
  */
 int
 do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf) {
-    int ret = -E_NO_FREE_PROC;
-    struct proc_struct *proc;
+    int ret = -E_NO_FREE_PROC;  //没有空闲进程可用
+    struct proc_struct *proc;   //创建新的线程
 
     // 检查当前进程数量是否超过最大进程数量限制
     if (nr_process >= MAX_PROCESS) {
@@ -345,7 +357,7 @@ do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf) {
 
     // 将新进程添加到进程列表
     hash_proc(proc);
-    list_add(&proc_list,&(proc->list_link));
+    list_add(&proc_list,&(proc->list_link));//将proc->list_link加到proc_list后
     nr_process ++;//更新进程数量计数器
 
     // 唤醒新进程，进入可调度状态
@@ -354,13 +366,13 @@ do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf) {
     // 返回新进程号pid
     ret = proc->pid;
 
-fork_out:
+fork_out://结束，返回ret
     return ret;
 
-bad_fork_cleanup_kstack:
-    put_kstack(proc);
-bad_fork_cleanup_proc:
-    kfree(proc);
+bad_fork_cleanup_kstack://分配内核栈失败
+    put_kstack(proc);//释放内核栈
+bad_fork_cleanup_proc://复制内存布局信息失败
+    kfree(proc);//释放进程控制
     goto fork_out;
 }
 

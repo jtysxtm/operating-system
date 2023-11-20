@@ -52,7 +52,7 @@ list_init(list_entry_t *elm) {
  * */
 static inline void
 list_add(list_entry_t *listelm, list_entry_t *elm) {
-    list_add_after(listelm, elm);
+    list_add_after(listelm, elm);//将elm节点插入到listelm节点之后
 }
 
 /* *

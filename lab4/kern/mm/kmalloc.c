@@ -258,23 +258,23 @@ void kfree(void *block)
 
 	if (!block)
 		return;
-
+	//检查传入的指针block是否与页面大小-1的按位与为0，即检查是否是页面对齐的指针
 	if (!((unsigned long)block & (PAGE_SIZE-1))) {
 		/* might be on the big block list */
-		spin_lock_irqsave(&block_lock, flags);
+		spin_lock_irqsave(&block_lock, flags);//// 获取自旋锁并保存当前中断状态到flags变量
 		for (bb = bigblocks; bb; last = &bb->next, bb = bb->next) {
-			if (bb->pages == block) {
-				*last = bb->next;
-				spin_unlock_irqrestore(&block_lock, flags);
-				__slob_free_pages((unsigned long)block, bb->order);
-				slob_free(bb, sizeof(bigblock_t));
+			if (bb->pages == block) {//// 如果当前bigblock_t结构体中的pages字段等于block指针
+				*last = bb->next;// 将上一个bigblock_t结构体的next指针指向当前bigblock_t结构体的下一个指针
+				spin_unlock_irqrestore(&block_lock, flags);  // 释放自旋锁并恢复之前的中断状态
+				__slob_free_pages((unsigned long)block, bb->order);//释放对应的页面
+				slob_free(bb, sizeof(bigblock_t));// 释放bigblock_t结构体占用的内存空间
 				return;
 			}
 		}
-		spin_unlock_irqrestore(&block_lock, flags);
+		spin_unlock_irqrestore(&block_lock, flags); // 释放自旋锁并恢复之前的中断状态
 	}
 
-	slob_free((slob_t *)block - 1, 0);
+	slob_free((slob_t *)block - 1, 0); //释放内存块
 	return;
 }
 

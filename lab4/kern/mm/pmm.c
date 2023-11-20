@@ -70,13 +70,13 @@ struct Page *alloc_pages(size_t n) {
 }
 
 // free_pages - call pmm->free_pages to free a continuous n*PAGESIZE memory
-void free_pages(struct Page *base, size_t n) {
+void free_pages(struct Page *base, size_t n) {//释放一定数量的物理页面
     bool intr_flag;
-    local_intr_save(intr_flag);
+    local_intr_save(intr_flag);//保持中断状态
     {
-        pmm_manager->free_pages(base, n);
+        pmm_manager->free_pages(base, n);//释放相应页面
     }
-    local_intr_restore(intr_flag);
+    local_intr_restore(intr_flag);//恢复之前保存的中断状态
 }
 
 // nr_free_pages - call pmm->nr_free_pages to get the size (nr*PAGESIZE)

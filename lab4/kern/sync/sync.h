@@ -7,15 +7,17 @@
 
 static inline bool __intr_save(void) {
     if (read_csr(sstatus) & SSTATUS_SIE) {
-        intr_disable();
-        return 1;
+        //read_csr(sstatus)读取控制寄存器sstatus位与操作检查其中的SIE位
+        //如果SIE位为1，表示中断允许
+        intr_disable();//关闭中断
+        return 1;//保存中断状态
     }
-    return 0;
+    return 0;//中断禁止，中断状态未被保存
 }
 
 static inline void __intr_restore(bool flag) {
     if (flag) {
-        intr_enable();
+        intr_enable();//开启中断
     }
 }
 
