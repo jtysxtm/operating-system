@@ -215,12 +215,51 @@ kernel panic at kern/process/proc.c:360:
 
 Welcome to the kernel debug monitor!!
 Type 'help' for a list of commands.
-
-
 ```
 
 ### proc_run函数实现过程
+```c++
+/ proc_run - make process "proc" running on cpu
+// NOTE: before call switch_to, should load  base addr of "proc"'s new PDT
 
+// proc_run - 将进程 "proc" 运行在 CPU 上
+// 注意：在调用 switch_to 之前，应该加载 "proc" 新页目录表的基地址
+void
+proc_run(struct proc_struct *proc) {
+    //检查要切换的进程是否与当前正在运行的进程相同，如果相同则不需要切换
+    if (proc != current) {
+        // LAB4:EXERCISE3 YOUR CODE
+        /*
+        * Some Useful MACROs, Functions and DEFINEs, you can use them in below implementation.
+        * MACROs or Functions:
+        *   local_intr_save():        Disable interrupts
+        *   local_intr_restore():     Enable Interrupts
+        *   lcr3():                   Modify the value of CR3 register
+        *   switch_to():              Context switching between two processes
+        */
+        // 禁用中断，保存中断状态
+        bool intr_flag;
+        local_intr_save(intr_flag);
+        // 保存当前进程的上下文，并切换到新进程
+        struct proc_struct * temp = current;
+        current = proc;
+        // 切换页表，以便使用新进程的地址空间
+        // cause: 
+        // 为了确保进程 A 不会访问到进程 B 的地址空间
+        // 页目录表包含了虚拟地址到物理地址的映射关系,将当前进程的虚拟地址空间映射关系切换为新进程的映射关系.
+        // 确保指令和数据的地址转换是基于新进程的页目录表进行的
+        lcr3(current->cr3);// 修改 CR3 寄存器(CR3寄存器:页目录表（PDT）的基地址)，加载新页目录表的基地址
+        // 上下文切换
+        // cause:
+        // 保存当前进程的信息,以便之后能够正确地恢复到当前进程
+        // 将新进程的上下文信息加载到相应的寄存器和寄存器状态寄存器中，确保 CPU 开始执行新进程的代码
+        // 禁用中断确保在切换期间不会被中断打断
+        switch_to(&(temp->context),&(proc->context));
+        // 恢复中断状态
+        local_intr_restore(intr_flag);
+    }
+}
+```
 ### 在本实验的执行过程中，创建且运行了几个内核线程？
 
 创建了两个内核线程：idleproc 和 initproc。
