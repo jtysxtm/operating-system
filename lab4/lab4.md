@@ -183,6 +183,23 @@ proc_run用于将指定的进程切换到CPU上运行。它的大致执行步骤
 
 如果可以得到如 附录A所示的显示内容（仅供参考，不是标准答案输出），则基本正确。
 
+```
+alloc_proc() correct!
+······
+······
+++ setup timer interrupts
+this initproc, pid = 1, name = "init"
+To U: "Hello world!!".
+To U: "en.., Bye, Bye. :)"
+kernel panic at kern/process/proc.c:360:
+    process exit!!.
+
+Welcome to the kernel debug monitor!!
+Type 'help' for a list of commands.
+
+
+```
+
 ## 扩展练习 Challenge：
 
 - 说明语句 `local_intr_save(intr_flag);....local_intr_restore(intr_flag);`是如何实现开关中断的？
