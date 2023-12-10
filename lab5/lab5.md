@@ -25,6 +25,79 @@ do_execv函数调用load_icode（位于kern/process/proc.c中）来加载并解�
 
 请在实验报告中简要说明你的设计实现过程。
 
+```c
+int copy_range(pde_t *to, pde_t *from, uintptr_t start, uintptr_t end,
+               bool share) {
+    assert(start % PGSIZE == 0 && end % PGSIZE == 0);// 页对齐
+    assert(USER_ACCESS(start, end));// 用户地址合法，在用户空间
+    // copy content by page unit.
+    do {// 遍历起始地址到结束
+        // call get_pte to find process A's pte according to the addr start
+        // 调用 get_pte 函数获取源进程 from 中地址 start 对应的页表项指针 ptep
+        // 如果页表项不存在，则将 start 向上取整到下一个页的起始地址。
+        pte_t *ptep = get_pte(from, start, 0), *nptep;
+        if (ptep == NULL) {
+            start = ROUNDDOWN(start + PTSIZE, PTSIZE);
+            continue;
+        }
+        // call get_pte to find process B's pte according to the addr start. If
+        // pte is NULL, just alloc a PT
+        if (*ptep & PTE_V) {//页表项是否有效（存在）
+            if ((nptep = get_pte(to, start, 1)) == NULL) {
+                return -E_NO_MEM;
+            }
+            // 获取源进程 A 中页表项的权限信息
+            uint32_t perm = (*ptep & PTE_USER);
+            // get page from ptep
+            // 将源进程 A 中的页表项转换成页结构体 page
+            struct Page *page = pte2page(*ptep);
+            // alloc a page for process B
+            // 在目标进程 B 中分配一个新的页结构体 npage
+            struct Page *npage = alloc_page();
+
+            assert(page != NULL);
+            assert(npage != NULL);
+            int ret = 0;
+            /* LAB5:EXERCISE2 YOUR CODE
+             * replicate content of page to npage, build the map of phy addr of
+             * nage with the linear addr start
+             *
+             * Some Useful MACROs and DEFINEs, you can use them in below
+             * implementation.
+             * MACROs or Functions:
+             *    page2kva(struct Page *page): return the kernel vritual addr of
+             * memory which page managed (SEE pmm.h)
+             *    page_insert: build the map of phy addr of an Page with the
+             * linear addr la
+             *    memcpy: typical memory copy function
+             *
+             * (1) find src_kvaddr: the kernel virtual address of page
+             * (2) find dst_kvaddr: the kernel virtual address of npage
+             * (3) memory copy from src_kvaddr to dst_kvaddr, size is PGSIZE
+             * (4) build the map of phy addr of  nage with the linear addr start
+             */
+            // 复制页面内容，并建立目标进程 B 的物理地址与线性地址的映射关系
+            void* src_kvaddr = page2kva(page); // 源页的内核虚拟地址
+            void* dst_kvaddr = page2kva(npage); // 目标页的内核虚拟地址
+            memcpy(dst_kvaddr, src_kvaddr, PGSIZE); // 复制页面内容
+            // 将目标进程 B 中的页表项和页结构体建立映射关系
+            ret = page_insert(to, npage, start, perm);
+            // 断言映射建立成功
+            assert(ret == 0);
+        }
+        start += PGSIZE;// 移动到下一页继续复制下一页内容
+    } while (start != 0 && start < end);
+    return 0;//完成所有页面复制
+}
+```
+
+`copy_range` 函数实现了将一个进程 A 的地址空间的内存内容从地址 start 到 end 复制到另一个进程 B 的地址空间的功能。
+  - 确保页对其和用户地址合法的情况下，遍历源进程A 的地址范围
+  - 获取源进程 A 中地址 start 对应的页表项指针 ptep和目标进程 B 中地址 start 对应的页表项指针 nptep
+  - 获取页表项权限，分配页结构体，获取内核虚拟地址，复制页面内容
+  - 将目标进程B 中的页表项和页结构体建立映射关系
+  - 继续复制后续页面内容直到完成所有页面复制
+
 - 如何设计实现Copy on Write机制？给出概要设计，鼓励给出详细设计。
 
   Copy-on-write（简称COW）的基本概念是指如果有多个使用者对一个资源A（比如内存块）进行读操作，则每个使用者只需获得一个指向同一个资源A的指针，就可以该资源了。若某使用者需要对这个资源A进行写操作，系统会对该资源进行拷贝操作，从而使得该“写操作”使用者获得一个该资源A的“私有”拷贝—资源B，可对资源B进行写操作。该“写操作”使用者对资源B的改变对于其他的使用者而言是不可见的，因为其他使用者看到的还是资源A。

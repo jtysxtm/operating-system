@@ -344,13 +344,16 @@ void exit_range(pde_t *pgdir, uintptr_t start, uintptr_t end) {
  *
  * CALL GRAPH: copy_mm-->dup_mmap-->copy_range
  */
+// 将一个地址空间的内存内容（从 start 到 end）从一个进程 A 复制到另一个进程 B 的功能
 int copy_range(pde_t *to, pde_t *from, uintptr_t start, uintptr_t end,
                bool share) {
-    assert(start % PGSIZE == 0 && end % PGSIZE == 0);
-    assert(USER_ACCESS(start, end));
+    assert(start % PGSIZE == 0 && end % PGSIZE == 0);// 页对齐
+    assert(USER_ACCESS(start, end));// 用户地址合法，在用户空间
     // copy content by page unit.
-    do {
+    do {// 遍历起始地址到结束
         // call get_pte to find process A's pte according to the addr start
+        // 调用 get_pte 函数获取源进程 from 中地址 start 对应的页表项指针 ptep
+        // 如果页表项不存在，则将 start 向上取整到下一个页的起始地址。
         pte_t *ptep = get_pte(from, start, 0), *nptep;
         if (ptep == NULL) {
             start = ROUNDDOWN(start + PTSIZE, PTSIZE);
@@ -358,15 +361,19 @@ int copy_range(pde_t *to, pde_t *from, uintptr_t start, uintptr_t end,
         }
         // call get_pte to find process B's pte according to the addr start. If
         // pte is NULL, just alloc a PT
-        if (*ptep & PTE_V) {
+        if (*ptep & PTE_V) {//页表项是否有效（存在）
             if ((nptep = get_pte(to, start, 1)) == NULL) {
                 return -E_NO_MEM;
             }
+            // 获取源进程 A 中页表项的权限信息
             uint32_t perm = (*ptep & PTE_USER);
             // get page from ptep
+            // 将源进程 A 中的页表项转换成页结构体 page
             struct Page *page = pte2page(*ptep);
             // alloc a page for process B
+            // 在目标进程 B 中分配一个新的页结构体 npage
             struct Page *npage = alloc_page();
+
             assert(page != NULL);
             assert(npage != NULL);
             int ret = 0;
@@ -392,13 +399,14 @@ int copy_range(pde_t *to, pde_t *from, uintptr_t start, uintptr_t end,
             void* src_kvaddr = page2kva(page); // 源页的内核虚拟地址
             void* dst_kvaddr = page2kva(npage); // 目标页的内核虚拟地址
             memcpy(dst_kvaddr, src_kvaddr, PGSIZE); // 复制页面内容
-            ret = page_insert(to, npage, start, perm); // 建立映射
-
+            // 将目标进程 B 中的页表项和页结构体建立映射关系
+            ret = page_insert(to, npage, start, perm);
+            // 断言映射建立成功
             assert(ret == 0);
         }
-        start += PGSIZE;// 移动到下一页
+        start += PGSIZE;// 移动到下一页继续复制下一页内容
     } while (start != 0 && start < end);
-    return 0;
+    return 0;//完成所有页面复制
 }
 
 // page_remove - free an Page which is related linear address la and has an

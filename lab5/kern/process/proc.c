@@ -900,6 +900,7 @@ static int
 kernel_execve(const char *name, unsigned char *binary, size_t size) {
     int64_t ret=0, len = strlen(name);
  //   ret = do_execve(name, len, binary, size);
+    // 使用内联汇编实现系统调用
     asm volatile(
         "li a0, %1\n"
         "lw a1, %2\n"
@@ -912,6 +913,7 @@ kernel_execve(const char *name, unsigned char *binary, size_t size) {
         : "=m"(ret)
         : "i"(SYS_exec), "m"(name), "m"(len), "m"(binary), "m"(size)
         : "memory");
+    // 将参数传递给寄存器 a0 到 a4，设置系统调用号为 10（SYS_exec）， ebreak 指令触发断点异常
     cprintf("ret = %d\n", ret);
     return ret;
 }//使用ebreak产生断点中断，设置a7值为10,要求转发到syscall
