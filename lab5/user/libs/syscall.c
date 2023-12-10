@@ -7,14 +7,15 @@
 
 static inline int
 syscall(int64_t num, ...) {
-    va_list ap;
-    va_start(ap, num);
-    uint64_t a[MAX_ARGS];
+    va_list ap;     //声明一个参数列表ap
+    va_start(ap, num);  //从num开始初始化参数列表
+    uint64_t a[MAX_ARGS];   
     int i, ret;
     for (i = 0; i < MAX_ARGS; i ++) {
+        //把参数存放到a[i]中
         a[i] = va_arg(ap, uint64_t);
     }
-    va_end(ap);
+    va_end(ap);     //将ap置为NULL
 
     asm volatile (
         "ld a0, %1\n"
@@ -28,6 +29,8 @@ syscall(int64_t num, ...) {
         : "=m" (ret)
         : "m"(num), "m"(a[0]), "m"(a[1]), "m"(a[2]), "m"(a[3]), "m"(a[4])
         :"memory");
+        //=m表示ret记录了输出操作数，m表示num和a[0]到a[4]是输入操作数，memory表示内联汇编可能会修改内存
+        //num和a[0]到a[4]依次存放在a0~a5中，返回值存到ret中
     return ret;
 }
 
