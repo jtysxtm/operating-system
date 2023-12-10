@@ -577,6 +577,8 @@ do_exit(int error_code) {
  */
 static int
 load_icode(unsigned char *binary, size_t size) {
+    // 确保当前进程的内存管理结构 mm 为空
+    // load_icode 应该在进程的 mm 为空的情况下执行
     if (current->mm != NULL) {
         panic("load_icode: current->mm must be empty.\n");
     }
@@ -584,20 +586,26 @@ load_icode(unsigned char *binary, size_t size) {
     int ret = -E_NO_MEM;
     struct mm_struct *mm;
     //(1) create a new mm for current process
+    // 创建一个新的内存管理结构 mm
     if ((mm = mm_create()) == NULL) {
         goto bad_mm;
     }
     //(2) create a new PDT, and mm->pgdir= kernel virtual addr of PDT
+    // 创建新的页目录 pgdir，并将其设置为 mm 的页目录
     if (setup_pgdir(mm) != 0) {
         goto bad_pgdir_cleanup_mm;
     }
     //(3) copy TEXT/DATA section, build BSS parts in binary to memory space of process
+    // 复制 ELF 文件的 TEXT/DATA 段到进程的内存空间
     struct Page *page;
     //(3.1) get the file header of the bianry program (ELF format)
+    // 获取 ELF 文件头
     struct elfhdr *elf = (struct elfhdr *)binary;
     //(3.2) get the entry of the program section headers of the bianry program (ELF format)
+    // 获取程序段头
     struct proghdr *ph = (struct proghdr *)(binary + elf->e_phoff);
     //(3.3) This program is valid?
+    // 检查 ELF 文件的有效性
     if (elf->e_magic != ELF_MAGIC) {
         ret = -E_INVAL_ELF;
         goto bad_elf_cleanup_pgdir;
@@ -605,27 +613,35 @@ load_icode(unsigned char *binary, size_t size) {
 
     uint32_t vm_flags, perm;
     struct proghdr *ph_end = ph + elf->e_phnum;
+    // 使用循环遍历 ELF 文件的各个程序段头，根据段的类型（p_type）判断是否为 ELF_PT_LOAD
+    // 将相应的段映射到进程的虚拟地址空间
     for (; ph < ph_end; ph ++) {
     //(3.4) find every program section headers
+        // 如果不是可加载的程序段，跳过
         if (ph->p_type != ELF_PT_LOAD) {
             continue ;
         }
+        // 如果文件大小大于内存大小，表示 ELF 格式错误，返回错误码
         if (ph->p_filesz > ph->p_memsz) {
             ret = -E_INVAL_ELF;
             goto bad_cleanup_mmap;
         }
+        // 如果文件大小为零，可能是 BSS 段，不需要复制内容,继续下一次循环
         if (ph->p_filesz == 0) {
             // continue ;
         }
     //(3.5) call mm_map fun to setup the new vma ( ph->p_va, ph->p_memsz)
+        // 调用 mm_map 函数设置新的虚拟内存区域（VMA），包括地址、大小和权限等
         vm_flags = 0, perm = PTE_U | PTE_V;
         if (ph->p_flags & ELF_PF_X) vm_flags |= VM_EXEC;
         if (ph->p_flags & ELF_PF_W) vm_flags |= VM_WRITE;
         if (ph->p_flags & ELF_PF_R) vm_flags |= VM_READ;
         // modify the perm bits here for RISC-V
+        // 修改权限位
         if (vm_flags & VM_READ) perm |= PTE_R;
         if (vm_flags & VM_WRITE) perm |= (PTE_W | PTE_R);
         if (vm_flags & VM_EXEC) perm |= PTE_X;
+        // 调用 mm_map 函数进行虚拟内存映射
         if ((ret = mm_map(mm, ph->p_va, ph->p_memsz, vm_flags, NULL)) != 0) {
             goto bad_cleanup_mmap;
         }
@@ -636,9 +652,12 @@ load_icode(unsigned char *binary, size_t size) {
         ret = -E_NO_MEM;
 
      //(3.6) alloc memory, and  copy the contents of every program section (from, from+end) to process's memory (la, la+end)
+        // 分配内存并复制每个程序段的内容到进程的内存中
         end = ph->p_va + ph->p_filesz;
      //(3.6.1) copy TEXT/DATA section of bianry program
+        // 复制可读可写的 TEXT/DATA 段的内容
         while (start < end) {
+            // 如果分配页面失败，返回错误码
             if ((page = pgdir_alloc_page(mm->pgdir, la, perm)) == NULL) {
                 goto bad_cleanup_mmap;
             }
@@ -646,11 +665,13 @@ load_icode(unsigned char *binary, size_t size) {
             if (end < la) {
                 size -= la - end;
             }
+            // 复制数据到页面中
             memcpy(page2kva(page) + off, from, size);
             start += size, from += size;
         }
 
       //(3.6.2) build BSS section of binary program
+        // 构建 BSS 段，将其内容初始化为零
         end = ph->p_va + ph->p_memsz;
         if (start < la) {
             /* ph->p_memsz == ph->p_filesz */
@@ -661,11 +682,13 @@ load_icode(unsigned char *binary, size_t size) {
             if (end < la) {
                 size -= la - end;
             }
+            // 将 BSS 段的内容初始化为零
             memset(page2kva(page) + off, 0, size);
             start += size;
             assert((end < la && start == end) || (end >= la && start == la));
         }
         while (start < end) {
+            // 如果分配页面失败，返回错误码
             if ((page = pgdir_alloc_page(mm->pgdir, la, perm)) == NULL) {
                 goto bad_cleanup_mmap;
             }
@@ -673,11 +696,14 @@ load_icode(unsigned char *binary, size_t size) {
             if (end < la) {
                 size -= la - end;
             }
+            // 将 BSS 段的内容初始化为零
             memset(page2kva(page) + off, 0, size);
             start += size;
         }
     }
     //(4) build user stack memory
+    // 为用户栈分配内存
+    // 使用 pgdir_alloc_page 分配几个物理页作为用户栈的底部
     vm_flags = VM_READ | VM_WRITE | VM_STACK;
     if ((ret = mm_map(mm, USTACKTOP - USTACKSIZE, USTACKSIZE, vm_flags, NULL)) != 0) {
         goto bad_cleanup_mmap;
@@ -688,6 +714,8 @@ load_icode(unsigned char *binary, size_t size) {
     assert(pgdir_alloc_page(mm->pgdir, USTACKTOP-4*PGSIZE , PTE_USER) != NULL);
     
     //(5) set current process's mm, sr3, and set CR3 reg = physical addr of Page Directory
+    // 增加 mm 的引用计数,设置当前进程的 mm 和 cr3
+    // 使用 lcr3 设置 CR3 寄存器，切换页表
     mm_count_inc(mm);
     current->mm = mm;
     current->cr3 = PADDR(mm->pgdir);
@@ -696,8 +724,11 @@ load_icode(unsigned char *binary, size_t size) {
     //(6) setup trapframe for user environment
     struct trapframe *tf = current->tf;
     // Keep sstatus
+    // 保存 sstatus 寄存器的值
     uintptr_t sstatus = tf->status;
+    // 清空 trapframe
     memset(tf, 0, sizeof(struct trapframe));
+    // 设置用户栈指针、程序计数器和状态寄存器
     /* LAB5:EXERCISE1 YOUR CODE
      * should set tf->gpr.sp, tf->epc, tf->status
      * NOTICE: If we set trapframe correctly, then the user level process can return to USER MODE from kernel. So
@@ -707,10 +738,9 @@ load_icode(unsigned char *binary, size_t size) {
      *          hint: check meaning of SPP, SPIE in SSTATUS, use them by SSTATUS_SPP, SSTATUS_SPIE(defined in risv.h)
      */
     tf->gpr.sp = USTACKTOP;// 设置用户进程的栈指针为用户栈的顶部.当进程从内核态切换到用户态时，栈指针需要指向用户栈的有效地址
-    tf->epc = elf->e_entry; //修改epc，指向程序内存入口
-    // 进程从内核态切换到用户态，需要将中断帧的状态调整为用户态，清除了 SPP 表示的特权级信息回到U-Mode，以及 SPIE 表示的中断使能信息。
+    tf->epc = elf->e_entry; //修改epc,切换为程序入口地址，sret返回地址发生变化
+    // 进程从内核态切换到用户态，需要将中断帧的状态调整为用户态，清除了 SPP 表示的特权级信息，以及 SPIE 表示的中断使能信息。
     tf->status = sstatus & ~(SSTATUS_SPP | SSTATUS_SPIE);// 将 sstatus 寄存器中的 SPP和 SPIE位清零
-
 
     ret = 0;
 out:
