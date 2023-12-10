@@ -64,6 +64,7 @@ sys_pgdir(uint64_t arg[]) {
     return 0;
 }
 
+//定义函数指针的数组，把每个系统调用编号的下标对应到对应的函数指针上
 static int (*syscalls[])(uint64_t arg[]) = {
     [SYS_exit]              sys_exit,
     [SYS_fork]              sys_fork,
@@ -82,15 +83,16 @@ void
 syscall(void) {
     struct trapframe *tf = current->tf;
     uint64_t arg[5];
-    int num = tf->gpr.a0;
+    int num = tf->gpr.a0;//取出系统调用编号
     if (num >= 0 && num < NUM_SYSCALLS) {
         if (syscalls[num] != NULL) {
+            //取出对应的参数
             arg[0] = tf->gpr.a1;
             arg[1] = tf->gpr.a2;
             arg[2] = tf->gpr.a3;
             arg[3] = tf->gpr.a4;
             arg[4] = tf->gpr.a5;
-            tf->gpr.a0 = syscalls[num](arg);
+            tf->gpr.a0 = syscalls[num](arg);    //根据标号执行给对应的函数进行处理
             return ;
         }
     }

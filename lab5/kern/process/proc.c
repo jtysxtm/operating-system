@@ -442,7 +442,7 @@ do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf) {
     *    update step 5: insert proc_struct into hash_list && proc_list, set the relation links of process
     */
  
-// 分配一个进程控制块
+    // 分配一个进程控制块
     proc = alloc_proc();
     if(proc==NULL)//分配失败
         goto fork_out; 
@@ -498,33 +498,50 @@ bad_fork_cleanup_proc:
 //   3. call scheduler to switch to other process
 int
 do_exit(int error_code) {
+    //如果当前进程是idleproc或者initproc就执行panic
     if (current == idleproc) {
         panic("idleproc exit.\n");
     }
     if (current == initproc) {
         panic("initproc exit.\n");
     }
-    struct mm_struct *mm = current->mm;
+
+    //获取当前进程的mm内存管理结构
+    struct mm_struct *mm = current->mm; 
+
+    //mm不为空说明是用户进程
     if (mm != NULL) {
+        //切换到内核页表
         lcr3(boot_cr3);
+        //mm引用计数为0，不被其他进程共享
         if (mm_count_dec(mm) == 0) {
+            //释放相关资源
             exit_mmap(mm);
             put_pgdir(mm);
             mm_destroy(mm);
         }
+        //标记该进程为已释放
         current->mm = NULL;
     }
+    
+    //设置进程状态为ZOMBIE表示已退出
     current->state = PROC_ZOMBIE;
     current->exit_code = error_code;
+
+    //关闭中断进行切换
     bool intr_flag;
     struct proc_struct *proc;
     local_intr_save(intr_flag);
     {
+        //获取当前进程父进程
         proc = current->parent;
+        //若父进程处于等待子进程状态，直接唤醒父进程
         if (proc->wait_state == WT_CHILD) {
             wakeup_proc(proc);
         }
+        //遍历当前进程的所有子进程进行修改
         while (current->cptr != NULL) {
+            //
             proc = current->cptr;
             current->cptr = proc->optr;
     
