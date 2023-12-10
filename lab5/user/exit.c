@@ -7,8 +7,10 @@ int
 main(void) {
     int pid, code;
     cprintf("I am the parent. Forking the child...\n");
+    // 创建子进程
     if ((pid = fork()) == 0) {
         cprintf("I am the child.\n");
+        // 模拟运行时间
         yield();
         yield();
         yield();
@@ -16,6 +18,7 @@ main(void) {
         yield();
         yield();
         yield();
+        // 子进程调用exit，传递给父进程一个magic值
         exit(magic);
     }
     else {
@@ -24,6 +27,7 @@ main(void) {
     assert(pid > 0);
     cprintf("I am the parent, waiting now..\n");
 
+    // 等待子进程退出，获取magic
     assert(waitpid(pid, &code) == 0 && code == magic);
     assert(waitpid(pid, &code) != 0 && wait() != 0);
     cprintf("waitpid %d ok.\n", pid);

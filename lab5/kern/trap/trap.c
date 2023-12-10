@@ -218,7 +218,10 @@ void exception_handler(struct trapframe *tf) {
         case CAUSE_USER_ECALL:
             //cprintf("Environment call from U-mode\n");
             tf->epc += 4;
-            syscall();
+             //sepc寄存器是产生异常的指令的位置，在异常处理结束后，会回到sepc的位置继续执行
+            //对于ecall, 希望sepc寄存器要指向产生异常的指令(ecall)的下一条指令
+            //否则就会回到ecall执行再执行一次ecall, 无限循环
+            syscall();// 系统调用处理
             break;
         case CAUSE_SUPERVISOR_ECALL:
             cprintf("Environment call from S-mode\n");

@@ -476,28 +476,36 @@ failed:
 
 bool
 user_mem_check(struct mm_struct *mm, uintptr_t addr, size_t len, bool write) {
-    if (mm != NULL) {
-        if (!USER_ACCESS(addr, addr + len)) {
+    //检查从addr开始长为len的一段内存能否被用户态程序访问
+    if (mm != NULL) {// 存在进程内存管理结构
+        if (!USER_ACCESS(addr, addr + len)) {// 检查从 addr 到 addr + len 的用户空间内存是否可访问
             return 0;
         }
+
+        // 通过遍历虚拟内存区域（VMA）来逐步检查
         struct vma_struct *vma;
         uintptr_t start = addr, end = addr + len;
         while (start < end) {
             if ((vma = find_vma(mm, start)) == NULL || start < vma->vm_start) {
+                // 查找 VMA，并检查 start 是否在 VMA 范围内
                 return 0;
             }
             if (!(vma->vm_flags & ((write) ? VM_WRITE : VM_READ))) {
+                //检查内存访问权限
                 return 0;
             }
+            // 如果是写操作且 VMA 是栈区域，检查是否在栈的有效范围内
             if (write && (vma->vm_flags & VM_STACK)) {
                 if (start < vma->vm_start + PGSIZE) { //check stack start & size
                     return 0;
                 }
             }
+            //更新 start 为下一个 VMA 的结束地址
             start = vma->vm_end;
         }
         return 1;
     }
+    //如果 mm 为空，说明是内核地址空间，使用 KERN_ACCESS 宏检查内核空间的内存是否可访问
     return KERN_ACCESS(addr, addr + len);
 }
 

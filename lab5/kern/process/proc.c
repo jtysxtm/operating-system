@@ -516,9 +516,9 @@ do_exit(int error_code) {
         //mm引用计数为0，不被其他进程共享
         if (mm_count_dec(mm) == 0) {
             //释放相关资源
-            exit_mmap(mm);
-            put_pgdir(mm);
-            mm_destroy(mm);
+            exit_mmap(mm);//释放mmap
+            put_pgdir(mm);//释放页目录表
+            mm_destroy(mm);//释放mm
         }
         //标记该进程为已释放
         current->mm = NULL;
@@ -535,22 +535,26 @@ do_exit(int error_code) {
     {
         //获取当前进程父进程
         proc = current->parent;
-        //若父进程处于等待子进程状态，直接唤醒父进程
+        //若父进程处于等待子进程状态，直接唤醒调用了do_wait在等待状态的父进程，令其进入就绪态准备回收子进程，
         if (proc->wait_state == WT_CHILD) {
             wakeup_proc(proc);
         }
         //遍历当前进程的所有子进程进行修改
         while (current->cptr != NULL) {
-            //
             proc = current->cptr;
+            //链表指针移动
             current->cptr = proc->optr;
-    
+            
+            //更改子进程的父进程为initproc，并加入initproc的子进程链表
             proc->yptr = NULL;
             if ((proc->optr = initproc->cptr) != NULL) {
+                //将initpoc的子进程链表头的yptr指向当前子进程
                 initproc->cptr->yptr = proc;
             }
             proc->parent = initproc;
             initproc->cptr = proc;
+
+            //如果子进程退出，唤醒initproc
             if (proc->state == PROC_ZOMBIE) {
                 if (initproc->wait_state == WT_CHILD) {
                     wakeup_proc(initproc);
@@ -558,8 +562,12 @@ do_exit(int error_code) {
             }
         }
     }
+    //开中断
     local_intr_restore(intr_flag);
+
+    //调用调度器启用新进程
     schedule();
+
     panic("do_exit will not return!! %d.\n", current->pid);
 }
 
@@ -722,31 +730,48 @@ bad_mm:
 int
 do_execve(const char *name, size_t len, unsigned char *binary, size_t size) {
     struct mm_struct *mm = current->mm;
+
+    //检查name名字空间，确认其是否是一个合法的用户空间范围
     if (!user_mem_check(mm, (uintptr_t)name, len, 0)) {
         return -E_INVAL;
     }
+
+    //限制进程名字长度
     if (len > PROC_NAME_LEN) {
         len = PROC_NAME_LEN;
     }
 
+    //在栈上开辟一块空间储存进程名
     char local_name[PROC_NAME_LEN + 1];
     memset(local_name, 0, sizeof(local_name));
     memcpy(local_name, name, len);
 
+    //清空原有的mm内存管理器
     if (mm != NULL) {
         cputs("mm != NULL");
+        //切换到内核页表
         lcr3(boot_cr3);
+        //mm引用计数为0，不被其他进程共享
         if (mm_count_dec(mm) == 0) {
+            //释放相关资源
             exit_mmap(mm);
             put_pgdir(mm);
             mm_destroy(mm);
         }
+        //标记该进程为空
         current->mm = NULL;
     }
+
+    //为ELF程序描述的各个段构造虚拟空间mmap_list
+    //为当前进程的空mm_struct创建新的页目录表和页表
+    //为每个vma_struct对应的虚拟空间的虚拟页分配物理页
+    //建立和对应页表的映射
     int ret;
     if ((ret = load_icode(binary, size)) != 0) {
         goto execve_exit;
     }
+
+    //将栈上存储的进程名更新
     set_proc_name(current, local_name);
     return 0;
 
@@ -768,7 +793,9 @@ do_yield(void) {
 int
 do_wait(int pid, int *code_store) {
     struct mm_struct *mm = current->mm;
+    //code_store用于返回子进程退出码
     if (code_store != NULL) {
+        //搜索vma链表code_store，检查是否是一个合法的用户空间范围
         if (!user_mem_check(mm, (uintptr_t)code_store, sizeof(int), 1)) {
             return -E_INVAL;
         }
@@ -776,30 +803,41 @@ do_wait(int pid, int *code_store) {
 
     struct proc_struct *proc;
     bool intr_flag, haskid;
+
+//寻找可回收的ZOMBIE态子进程
 repeat:
     haskid = 0;
     if (pid != 0) {
+        //找到pid对应进程
         proc = find_proc(pid);
         if (proc != NULL && proc->parent == current) {
-            haskid = 1;
+            haskid = 1;//标记找到了该进程，且为当前进程的子进程
             if (proc->state == PROC_ZOMBIE) {
+                //并且该进程是ZOMBIE态，跳转到found进行回收
                 goto found;
             }
         }
     }
     else {
+        //pid为0，等待回收子进程链表中的所有进程
         proc = current->cptr;
         for (; proc != NULL; proc = proc->optr) {
             haskid = 1;
             if (proc->state == PROC_ZOMBIE) {
+                //只要在子进程链表中找到了ZOMBIE态的子进程，就跳转到found进行回收
                 goto found;
             }
         }
     }
     if (haskid) {
+        //找到了当前进程的指定子进程但其不是ZOMBIE态，或当前进程有子进程，但所有子进程都不是ZOMBIE态
+        //设置当前进程状态为SLEEPING休眠
         current->state = PROC_SLEEPING;
+        //设置当前进程等待状态为等待子进程
         current->wait_state = WT_CHILD;
+        //调度其他可以执行的进程
         schedule();
+        //被唤醒，说明当前出现了ZOMBIE态的子进程，重新跳转至repeat
         if (current->flags & PF_EXITING) {
             do_exit(-E_KILLED);
         }
@@ -807,21 +845,36 @@ repeat:
     }
     return -E_BAD_PROC;
 
+//找到ZOMBIE进程后进行回收
 found:
+
+    //initproc和idleproc不能回收
     if (proc == idleproc || proc == initproc) {
         panic("wait idleproc or initproc.\n");
     }
+
+    //将子进程的退出代码存放到code_store
     if (code_store != NULL) {
         *code_store = proc->exit_code;
     }
+
+    //关闭中断
     local_intr_save(intr_flag);
     {
+        //将proc从哈希链表中断开
         unhash_proc(proc);
+        //将proc从进程链表中断开
         remove_links(proc);
     }
+    //开启中断
     local_intr_restore(intr_flag);
+
+    //回收子进程的内核栈
     put_kstack(proc);
+
+    //释放进程控制块
     kfree(proc);
+
     return 0;
 }
 
@@ -861,8 +914,11 @@ kernel_execve(const char *name, unsigned char *binary, size_t size) {
         : "memory");
     cprintf("ret = %d\n", ret);
     return ret;
-}
+}//使用ebreak产生断点中断，设置a7值为10,要求转发到syscall
 
+// 名称，起始地址，大小
+// 打印当前线程pid和用户程序名称
+// 在内核执行程序功能
 #define __KERNEL_EXECVE(name, binary, size) ({                          \
             cprintf("kernel_execve: pid = %d, name = \"%s\".\n",        \
                     current->pid, name);                                \
@@ -889,7 +945,7 @@ user_main(void *arg) {
 #ifdef TEST
     KERNEL_EXECVE2(TEST, TESTSTART, TESTSIZE);
 #else
-    KERNEL_EXECVE(exit);
+    KERNEL_EXECVE(exit); //执行exit程序
 #endif
     panic("user_main execve failed.\n");
 }
@@ -897,16 +953,16 @@ user_main(void *arg) {
 // init_main - the second kernel thread used to create user_main kernel threads
 static int
 init_main(void *arg) {
-    size_t nr_free_pages_store = nr_free_pages();
-    size_t kernel_allocated_store = kallocated();
+    size_t nr_free_pages_store = nr_free_pages();// 获取当前系统的空闲页面数量
+    size_t kernel_allocated_store = kallocated();// 获取当前系统的空闲页面数量
 
-    int pid = kernel_thread(user_main, NULL, 0);
-    if (pid <= 0) {
+    int pid = kernel_thread(user_main, NULL, 0);// 创建内核进程执行用户进程
+    if (pid <= 0) {// 线程创建失败
         panic("create user_main failed.\n");
     }
 
-    while (do_wait(0, NULL) == 0) {
-        schedule();
+    while (do_wait(0, NULL) == 0) {//等待进程推出
+        schedule();//切换执行其他可运行进程
     }
 
     cprintf("all user-mode processes have quit.\n");

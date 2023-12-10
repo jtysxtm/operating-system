@@ -29,7 +29,10 @@ syscall(int64_t num, ...) {
         : "=m" (ret)
         : "m"(num), "m"(a[0]), "m"(a[1]), "m"(a[2]), "m"(a[3]), "m"(a[4])
         :"memory");
-        //=m表示ret记录了输出操作数，m表示num和a[0]到a[4]是输入操作数，memory表示内联汇编可能会修改内存
+        // 通过内联汇编进行ecall环境调用，产生trap, 进入S mode进行异常处理
+        //=m表示ret记录了输出操作数
+        //m表示num和a[0]到a[4]是输入操作数
+        //memory表示内联汇编可能会修改内存
         //num和a[0]到a[4]依次存放在a0~a5中，返回值存到ret中
     return ret;
 }
