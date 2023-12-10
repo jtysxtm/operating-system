@@ -707,8 +707,8 @@ load_icode(unsigned char *binary, size_t size) {
      *          hint: check meaning of SPP, SPIE in SSTATUS, use them by SSTATUS_SPP, SSTATUS_SPIE(defined in risv.h)
      */
     tf->gpr.sp = USTACKTOP;// 设置用户进程的栈指针为用户栈的顶部.当进程从内核态切换到用户态时，栈指针需要指向用户栈的有效地址
-    tf->epc = elf->e_entry; //修改epc，sret返回地址发生变化，返回执行exit.c函数，其中执行退出，调用sys_exit
-    // 进程从内核态切换到用户态，需要将中断帧的状态调整为用户态，清除了 SPP 表示的特权级信息，以及 SPIE 表示的中断使能信息。
+    tf->epc = elf->e_entry; //修改epc，指向程序内存入口
+    // 进程从内核态切换到用户态，需要将中断帧的状态调整为用户态，清除了 SPP 表示的特权级信息回到U-Mode，以及 SPIE 表示的中断使能信息。
     tf->status = sstatus & ~(SSTATUS_SPP | SSTATUS_SPIE);// 将 sstatus 寄存器中的 SPP和 SPIE位清零
 
 
