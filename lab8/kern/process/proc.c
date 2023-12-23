@@ -723,13 +723,13 @@ load_icode(int fd, int argc, char **kargv) {
     }
 
     // (7) setup tf
+    uintptr_t sstatus = tf->status;
     struct trapframe *tf = current->tf; // 设置中断帧
     memset(tf, 0, sizeof(struct trapframe));
-    tf->tf_cs = USER_CS; // 需要返回到用户态，因此使用用户态的数据段和代码段的选择子
-    tf->tf_ds = tf->tf_es = tf->tf_ss = USER_DS;
-    tf->tf_esp = stacktop; // 栈顶位置为先前计算过的栈顶位置，注意在C语言的函数调用规范中，栈顶指针指向的位置应该是返回地址而不是第一个参数，这里让栈顶指针指向了第一个参数的原因在于，在中断返回之后，会跳转到ELF可执行程序的入口处，在该入口处会进一步使用call命令调用主函数，这时候也就完成了将Return address入栈的功能，因此这里无需画蛇添足压入返回地址
-    tf->tf_eip = elfp->e_entry; // 将返回地址设置为用户程序的入口
-    tf->tf_eflags = 0x2 | FL_IF; // 允许中断，根据IA32的规范，eflags的第1位需要恒为1
+     tf->gpr.sp = USTACKTOP;// 设置用户进程的栈指针为用户栈的顶部.当进程从内核态切换到用户态时，栈指针需要指向用户栈的有效地址
+    tf->epc = elfp->e_entry; //修改epc,切换为程序入口地址，sret返回地址发生变化
+    // 进程从内核态切换到用户态，需要将中断帧的状态调整为用户态，清除了 SPP 表示的特权级信息，以及 SPIE 表示的中断使能信息。
+    tf->status = sstatus & ~(SSTATUS_SPP | SSTATUS_SPIE);// 将 sstatus 寄存器中的 SPP和 SPIE位清零
     ret = 0;
     
 out:

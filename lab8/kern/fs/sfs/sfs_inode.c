@@ -599,32 +599,49 @@ sfs_io_nolock(struct sfs_fs *sfs, struct sfs_inode *sin, void *buf, off_t offset
      * (3) If end position isn't aligned with the last block, Rd/Wr some content from begin to the (endpos % SFS_BLKSIZE) of the last block
 	 *       NOTICE: useful function: sfs_bmap_load_nolock, sfs_buf_op	
 	*/
-
-    if (offset % SFS_BLKSIZE != 0 || endpos / SFS_BLKSIZE == offset / SFS_BLKSIZE) { // 判断被需要读/写的区域所覆盖的数据块中的第一块是否是完全被覆盖的，如果不是，则需要调用非整块数据块进行读或写的函数来完成相应操作
-        blkoff = offset % SFS_BLKSIZE; // 计算出在第一块数据块中进行读或写操作的偏移量
-        size = (nblks != 0) ? (SFS_BLKSIZE - blkoff) : (endpos - offset); // 计算出在第一块数据块中进行读或写操作需要的数据长度
-        if ((ret = sfs_bmap_load_nolock(sfs, sin, blkno, &ino)) != 0) goto out; // 获取当前这个数据块对应到的磁盘上的数据块的编号
-        if ((ret = sfs_buf_op(sfs, buf, size, ino, blkoff)) != 0) goto out; // 将数据写入到磁盘中
-        alen += size; // 维护已经读写成功的数据长度信息
+    if ((blkoff = offset % SFS_BLKSIZE) != 0|| endpos / SFS_BLKSIZE == offset / SFS_BLKSIZE)  { // 第一块是否是align的？
+        // 要找到第一块中要读的大小。如果开始 开始块与结束块，块号相同，则只读 endpos - offset长度
+        // 否则，读第一个块到结尾
+        size = (nblks != 0) ? (SFS_BLKSIZE - blkoff) : (endpos - offset);
+       if ((ret = sfs_bmap_load_nolock(sfs, sin, blkno, &ino)) != 0) // 载入这个文件逻辑上第blkno个数据块，ino为所对应的 索引
+        {
+            goto out;
+        }
+        if ((ret = sfs_buf_op(sfs, buf, size, ino, blkoff)) != 0) // 将第ino块（磁盘块号就是inode的序列号）从blkoff读取buf (或被写入)
+        {
+            goto out;
+        }
+        alen += size;
+        if (nblks == 0)
+        {
+            goto out;
+        }
         buf += size;
+        blkno++;
+        nblks--;
     }
-    uint32_t my_nblks = nblks;
-    if (offset % SFS_BLKSIZE != 0 && my_nblks > 0) my_nblks --;
-    if (my_nblks > 0) { // 判断是否存在被需要读写的区域完全覆盖的数据块
-            if ((ret = sfs_bmap_load_nolock(sfs, sin, (offset % SFS_BLKSIZE == 0) ? blkno: blkno + 1, &ino)) != 0) goto out; // 如果存在，首先获取这些数据块对应到磁盘上的数据块的编号
-            if ((ret = sfs_block_op(sfs, buf, ino, my_nblks)) != 0) goto out; // 将这些磁盘上的这些数据块进行读或写操作
-            size = SFS_BLKSIZE * my_nblks;
-            alen += size; // 维护已经成功读写的数据长度
-            buf += size; // 维护缓冲区的偏移量
+    // 对齐的中间块，循环读取
+    size = SFS_BLKSIZE;
+    while (nblks != 0) { 
+        if ((ret = sfs_bmap_load_nolock(sfs, sin, blkno, &ino)) != 0) {
+            goto out;
+        }
+        if ((ret = sfs_block_op(sfs, buf, ino, 1)) != 0) { // 读取或写入完整的一块
+            goto out;
+        }
+        alen += size, buf += size, blkno++, nblks--;
     }
-    if (endpos % SFS_BLKSIZE != 0 && endpos / SFS_BLKSIZE != offset / SFS_BLKSIZE) { // 判断需要读写的最后一个数据块是否被完全覆盖（这里还需要确保这个数据块不是第一块数据块，因为第一块数据块已经操作过了）
-            size = endpos % SFS_BLKSIZE; // 确定在这数据块中需要读写的长度
-            if ((ret = sfs_bmap_load_nolock(sfs, sin, endpos / SFS_BLKSIZE, &ino) == 0) != 0) goto out; // 获取该数据块对应到磁盘上的数据块的编号
-            if ((ret = sfs_buf_op(sfs, buf, size, ino, 0)) != 0) goto out; // 进行非整块的读或者写操作
-            alen += size;
-            buf += size;
+    // 末尾最后一块没对齐的情况
+    // 和读取第一个块类似，先找到对应的索引号，再向buffer读取应读的大小
+    if ((size = endpos % SFS_BLKSIZE) != 0) {  //更新size
+        if ((ret = sfs_bmap_load_nolock(sfs, sin, blkno, &ino)) != 0) {
+            goto out;
+        }
+        if ((ret = sfs_buf_op(sfs, buf, size, ino, 0)) != 0) {   
+            goto out;
+        }
+        alen += size;
     }
-
 
 
     
