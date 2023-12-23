@@ -235,7 +235,7 @@ proc_run(struct proc_struct *proc) {
         local_intr_save(intr_flag);
         {
             current = proc;
-            load_esp0(next->kstack + KSTACKSIZE);
+            //load_esp0(next->kstack + KSTACKSIZE);
             lcr3(next->cr3);
             switch_to(&(prev->context), &(next->context));
         }
@@ -772,8 +772,8 @@ load_icode(int fd, int argc, char **kargv) {
     }
 
     // (7) setup tf
-    uintptr_t sstatus = tf->status;
     struct trapframe *tf = current->tf; // 设置中断帧
+    uintptr_t sstatus = tf->status;
     memset(tf, 0, sizeof(struct trapframe));
      tf->gpr.sp = USTACKTOP;// 设置用户进程的栈指针为用户栈的顶部.当进程从内核态切换到用户态时，栈指针需要指向用户栈的有效地址
     tf->epc = elfp->e_entry; //修改epc,切换为程序入口地址，sret返回地址发生变化
