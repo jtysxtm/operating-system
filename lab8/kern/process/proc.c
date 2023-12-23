@@ -230,7 +230,16 @@ proc_run(struct proc_struct *proc) {
     *        MACROs or Functions:
      *       flush_tlb():          flush the tlb        
      */
-
+        bool intr_flag;
+        struct proc_struct *prev = current, *next = proc;
+        local_intr_save(intr_flag);
+        {
+            current = proc;
+            load_esp0(next->kstack + KSTACKSIZE);
+            lcr3(next->cr3);
+            switch_to(&(prev->context), &(next->context));
+        }
+        local_intr_restore(intr_flag);
     }
 }
 
@@ -469,6 +478,46 @@ do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf) {
   *    update step 1: set child proc's parent to current process, make sure current process's wait_state is 0
   *    update step 5: insert proc_struct into hash_list && proc_list, set the relation links of process
     */
+    // 分配一个进程控制块
+    proc = alloc_proc();
+    if(proc==NULL)//分配失败
+        goto fork_out; 
+
+    // 设置当前进程为新进程的父进程
+    proc->parent = current;
+    assert(current->wait_state == 0);
+
+    // 为新进程分配内核栈,用于存储子进程在内核态执行时的栈帧信息。
+    if(setup_kstack(proc))
+        goto bad_fork_cleanup_kstack;//跳转进行清理
+
+    // 复制进程的内存布局信息，以确保新进程拥有与原进程相同的内存环境
+    // 根据 clone_flags 参数的设置，决定是复制（CLONE_VM 未设置）还是共享（CLONE_VM 设置）父进程的内存管理结构。
+    if(copy_mm(clone_flags,proc))
+        goto bad_fork_cleanup_proc;//失败则进行清理
+
+    // 复制原进程的上下文到新进程
+    // 设置子进程的执行上下文和栈信息。
+    // 其中，执行上下文包括 trapframe，表示子进程的中断帧，以及 context 结构，
+    // 用于在进程切换时保存和恢复寄存器状态。
+    copy_thread(proc,stack,tf);
+
+    bool intr_flag;
+    local_intr_save(intr_flag);
+    {
+        proc->pid = get_pid();// 为子进程获取一个唯一的 PID
+        hash_proc(proc);// 将子进程添加到进程哈希表中
+        // list_add(&proc_list,&(proc->list_link));// 将新进程添加到进程列表中
+        // nr_process ++;//更新进程数量计数器
+        set_links(proc);// 设置进程的关系链
+    }
+    local_intr_restore(intr_flag);
+
+    // 设置新进程为可运行状态，唤醒新进程
+    wakeup_proc(proc);
+    // 将返回值设置为新进程的 PID
+    ret = proc->pid; 
+
   
     if (copy_files(clone_flags, proc) != 0) { //for LAB8
         goto bad_fork_cleanup_kstack;
