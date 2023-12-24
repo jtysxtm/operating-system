@@ -216,10 +216,13 @@ vfs_add_dev(const char *devname, struct inode *devnode, bool mountable) {
  * find_mount - Look for a mountable device named DEVNAME.
  *              Should already hold vdev_list lock.
  */
+// 查找可挂载设备
 static int
 find_mount(const char *devname, vfs_dev_t **vdev_store) {
     assert(devname != NULL);
     list_entry_t *list = &vdev_list, *le = list;
+
+    // 遍历设备列表，查找匹配的设备
     while ((le = list_next(le)) != list) {
         vfs_dev_t *vdev = le2vdev(le, vdev_link);
         if (vdev->mountable && strcmp(vdev->devname, devname) == 0) {
@@ -227,7 +230,7 @@ find_mount(const char *devname, vfs_dev_t **vdev_store) {
             return 0;
         }
     }
-    return -E_NO_DEV;
+    return -E_NO_DEV;// 没有找到匹配的设备
 }
 
 /*
@@ -236,28 +239,37 @@ find_mount(const char *devname, vfs_dev_t **vdev_store) {
  *
  * The DATA argument is passed through unchanged to MOUNTFUNC.
  */
+// 挂载文件系统
 int
 vfs_mount(const char *devname, int (*mountfunc)(struct device *dev, struct fs **fs_store)) {
     int ret;
-    lock_vdev_list();
+    lock_vdev_list();// 加锁，防止并发挂载操作
+
     vfs_dev_t *vdev;
+
+    // 查找挂载设备
     if ((ret = find_mount(devname, &vdev)) != 0) {
         goto out;
     }
+
+    // 检查设备是否已经挂载
     if (vdev->fs != NULL) {
         ret = -E_BUSY;
         goto out;
     }
+
+    // 确保挂载设备的名称和属性不为空。
     assert(vdev->devname != NULL && vdev->mountable);
 
-    struct device *dev = vop_info(vdev->devnode, device);
-    if ((ret = mountfunc(dev, &(vdev->fs))) == 0) {
-        assert(vdev->fs != NULL);
-        cprintf("vfs: mount %s.\n", vdev->devname);
+    // 获取设备信息并调用挂载函数
+    struct device *dev = vop_info(vdev->devnode, device);// 获取挂载设备的信息结构
+    if ((ret = mountfunc(dev, &(vdev->fs))) == 0) {//调用挂载函数，将设备信息和文件系统指针传递给挂载函数
+        assert(vdev->fs != NULL);// 确保文件系统指针已被正确设置
+        cprintf("vfs: mount %s.\n", vdev->devname);// 打印挂载成功信息
     }
 
 out:
-    unlock_vdev_list();
+    unlock_vdev_list();// 解锁全局设备列表，允许其他线程进行挂载操作
     return ret;
 }
 
