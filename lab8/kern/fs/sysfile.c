@@ -60,12 +60,15 @@ sysfile_close(int fd) {
 int
 sysfile_read(int fd, void *base, size_t len) {
     struct mm_struct *mm = current->mm;
+    //读取长度不为0
     if (len == 0) {
         return 0;
     }
+    //文件是可读的
     if (!file_testfd(fd, 1, 0)) {
         return -E_INVAL;
     }
+    //声明一个缓存，4096字节
     void *buffer;
     if ((buffer = kmalloc(IOBUF_SIZE)) == NULL) {
         return -E_NO_MEM;
@@ -74,31 +77,41 @@ sysfile_read(int fd, void *base, size_t len) {
     int ret = 0;
     size_t copied = 0, alen;
     while (len != 0) {
+        //更改alen为实际大小
         if ((alen = IOBUF_SIZE) > len) {
             alen = len;
         }
+
+        //调用file_read
         ret = file_read(fd, buffer, alen, &alen);
+
+        //还在读取数据
         if (alen != 0) {
             lock_mm(mm);
-            {
+            {   
+                //copye到用户空间
                 if (copy_to_user(mm, base, buffer, alen)) {
                     assert(len >= alen);
                     base += alen, len -= alen, copied += alen;
                 }
+                //如果read未读取数据
                 else if (ret == 0) {
                     ret = -E_INVAL;
                 }
             }
             unlock_mm(mm);
         }
+        //读数据出错或读取完成
         if (ret != 0 || alen == 0) {
             goto out;
         }
     }
 
 out:
+    //释放起先声明的缓存
     kfree(buffer);
     if (copied != 0) {
+        //返回完成了copy的长度
         return copied;
     }
     return ret;

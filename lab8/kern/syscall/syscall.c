@@ -93,6 +93,7 @@ sys_read(uint64_t arg[]) {
     int fd = (int)arg[0];
     void *base = (void *)arg[1];
     size_t len = (size_t)arg[2];
+    //传入三个参数，分别是文件描述符、基地址和读取长度
     return sysfile_read(fd, base, len);
 }
 

@@ -1,0 +1,13 @@
+发起read系统调用后，进入sys_read函数，进入内核态后调用了sysfile_read函数，传入文件句柄、base和len，此时就进入到了文件系统抽象层。
+
+sysfile_read首先检查文件长度是否不为0、文件是否可读（file_testfd），之后声明buffer空间，即调用kmalloc函数分配4096字节的buffer空间。之后进入循环，只要文件仍有剩余部分，就重复循环：
+
+    每次循环中，先检查剩余部分大小，若其小于4096字节，则只读取剩余部分的大小。然后调用file_read函数将文件内容读取到buffer中，alen为实际大小。调用copy_to_user函数将读到的内容拷贝到用户的内存空间中，调整各变量以进行下一次循环读取，直至指定长度读取完成。最后函数调用层层返回至用户程序，用户程序收到了读到的文件内容。
+
+file_ready有四个参数，文件描述符fd、缓存基地址base、读取长度len、实际读取长度copied_store。通过文件描述符fd找到了对应文件的对应内存中的inode，确认文件可读后，修改记录属性，通过inode去调用vop_read，事实上就是转交到了sfs_read函数进行处理（通过函数指针）。调整文件指针偏移量pos，向后移动iobuf_used(iob)。调用filemap_release使打开这个文件的计数减一。若为0则释放。
+
+在sfs_inode.c中sfs_node_fileops定义了.vop_read = sfs_read
+
+sfs_read调用sfs_io，传入三个参数，分别是对应文件的inode node，缓存iob，表示读写的布尔值write。先找到inode对应sfs和sin，然后调用sfs_io_nolock函数进行读取文件操作，最后调用iobuf_skip函数调整iobuf的指针
+
+sfs_bmap_load_nolock函数将对应sfs_inode的第index个索引指向的block的索引值取出存到相应的指针指向的单元（ino_store）。它调用sfs_bmap_get_nolock来完成相应的操作。sfs_rbuf和sfs_rblock函数最终都调用sfs_rwblock_nolock函数完成操作，而sfs_rwblock_nolock函数调用dop_io->disk0_io->disk0_read_blks_nolock->ide_read_secs完成对磁盘的操作。
