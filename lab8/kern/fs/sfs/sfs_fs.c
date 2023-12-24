@@ -156,6 +156,8 @@ sfs_do_mount(struct device *dev, struct fs **fs_store) {
     }
 
     /* allocate fs structure */
+    // 分配并初始化文件系统（fs）结构，确保内存分配成功
+    // 将 sfs_fs 结构与 fs 结构关联
     struct fs *fs;
     if ((fs = alloc_fs(sfs)) == NULL) {
         return -E_NO_MEM;
@@ -165,25 +167,28 @@ sfs_do_mount(struct device *dev, struct fs **fs_store) {
 
     int ret = -E_NO_MEM;
 
+    // 分配一个缓冲区，用于后续的读取文件系统超级块等操作。
     void *sfs_buffer;
     if ((sfs->sfs_buffer = sfs_buffer = kmalloc(SFS_BLKSIZE)) == NULL) {
         goto failed_cleanup_fs;
     }
 
     /* load and check superblock */
+    // 通过 sfs_init_read 函数读取超级块并进行初始化。如果操作失败，跳转到清理代码。
     if ((ret = sfs_init_read(dev, SFS_BLKN_SUPER, sfs_buffer)) != 0) {
         goto failed_cleanup_sfs_buffer;
     }
 
     ret = -E_INVAL;
 
+    // 检查超级块的合法性
     struct sfs_super *super = sfs_buffer;
-    if (super->magic != SFS_MAGIC) {
+    if (super->magic != SFS_MAGIC) {// 变量魔数， 0x2f8dbe2a，检查磁盘镜像是否是合法的 SFS img
         cprintf("sfs: wrong magic in superblock. (%08x should be %08x).\n",
                 super->magic, SFS_MAGIC);
         goto failed_cleanup_sfs_buffer;
     }
-    if (super->blocks > dev->d_blocks) {
+    if (super->blocks > dev->d_blocks) {//blocks  SFS 中所有 block 的数量，即 img 的大小
         cprintf("sfs: fs has %u blocks, device has %u blocks.\n",
                 super->blocks, dev->d_blocks);
         goto failed_cleanup_sfs_buffer;
@@ -196,6 +201,7 @@ sfs_do_mount(struct device *dev, struct fs **fs_store) {
     uint32_t i;
 
     /* alloc and initialize hash list */
+    // 为哈希列表分配内存，并对其进行初始化
     list_entry_t *hash_list;
     if ((sfs->hash_list = hash_list = kmalloc(sizeof(list_entry_t) * SFS_HLIST_SIZE)) == NULL) {
         goto failed_cleanup_sfs_buffer;
@@ -205,16 +211,17 @@ sfs_do_mount(struct device *dev, struct fs **fs_store) {
     }
 
     /* load and check freemap */
-    struct bitmap *freemap;
-    uint32_t freemap_size_nbits = sfs_freemap_bits(super);
+    struct bitmap *freemap;// 表示文件系统中各个块的使用情况
+    uint32_t freemap_size_nbits = sfs_freemap_bits(super);// 总的位数，即表示文件系统中块的总数
     if ((sfs->freemap = freemap = bitmap_create(freemap_size_nbits)) == NULL) {
         goto failed_cleanup_hash_list;
     }
-    uint32_t freemap_size_nblks = sfs_freemap_blocks(super);
+    uint32_t freemap_size_nblks = sfs_freemap_blocks(super);// 占用的块数，即位图的总大小以块为单位
     if ((ret = sfs_init_freemap(dev, freemap, SFS_BLKN_FREEMAP, freemap_size_nblks, sfs_buffer)) != 0) {
         goto failed_cleanup_freemap;
     }
 
+    // 计算未使用的块数，并确保其与超级块中的记录一致。
     uint32_t blocks = sfs->super.blocks, unused_blocks = 0;
     for (i = 0; i < freemap_size_nbits; i ++) {
         if (bitmap_test(freemap, i)) {
@@ -224,6 +231,7 @@ sfs_do_mount(struct device *dev, struct fs **fs_store) {
     assert(unused_blocks == sfs->super.unused_blocks);
 
     /* and other fields */
+    // 初始化其他字段，包括锁、信号量、inode 列表等，并输出挂载信息
     sfs->super_dirty = 0;
     sem_init(&(sfs->fs_sem), 1);
     sem_init(&(sfs->io_sem), 1);
@@ -233,6 +241,7 @@ sfs_do_mount(struct device *dev, struct fs **fs_store) {
             blocks - unused_blocks, unused_blocks, blocks);
 
     /* link addr of sync/get_root/unmount/cleanup funciton  fs's function pointers*/
+    // 链接文件系统的同步、获取根目录、卸载、清理等函数指针，最后将文件系统结构指针返回
     fs->fs_sync = sfs_sync;
     fs->fs_get_root = sfs_get_root;
     fs->fs_unmount = sfs_unmount;
