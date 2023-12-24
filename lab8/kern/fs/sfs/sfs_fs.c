@@ -251,6 +251,7 @@ failed_cleanup_fs:
     return ret;
 }
 
+// 尝试挂载文件系统，调用 vfs_mount 函数
 int
 sfs_mount(const char *devname) {
     return vfs_mount(devname, sfs_do_mount);
