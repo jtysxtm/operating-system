@@ -145,6 +145,9 @@ sfs_init_freemap(struct device *dev, struct bitmap *freemap, uint32_t blkno, uin
  * @dev:        the block device contains sfs file system
  * @fs_store:   the fs struct in memroy
  */
+// 挂载 SFS 文件系统，初始化相关数据结构，包括超级块、位图等
+// 最后返回文件系统结构指针
+// 如果在挂载过程中发生错误，会进行相应的清理工作
 static int
 sfs_do_mount(struct device *dev, struct fs **fs_store) {
     static_assert(SFS_BLKSIZE >= sizeof(struct sfs_super));
