@@ -7,9 +7,13 @@
  * iobuf is a buffer Rd/Wr status record
  */
 struct iobuf {
+    // 缓冲区的基地址（用于读/写）
     void *io_base;     // the base addr of buffer (used for Rd/Wr)
+    // 缓冲区中当前的读/写位置，将会被传输的量已增加
     off_t io_offset;   // current Rd/Wr position in buffer, will have been incremented by the amount transferred
+    // 缓冲区的长度（用于读/写）
     size_t io_len;     // the length of buffer  (used for Rd/Wr)
+    // 当前待传输的剩余长度，将会被传输的量已减少
     size_t io_resid;   // current resident length need to Rd/Wr, will have been decremented by the amount transferred.
 };
 

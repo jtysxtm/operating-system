@@ -23,8 +23,9 @@ typedef struct {
 #define le2vdev(le, member)                         \
     to_struct((le), vfs_dev_t, member)
 
+// 通过访问此链表，可以找到 ucore 能够访问的所有设备文件
 static list_entry_t vdev_list;     // device info list in vfs layer
-static semaphore_t vdev_list_sem;
+static semaphore_t vdev_list_sem;  // 互斥访问的semaphore
 
 static void
 lock_vdev_list(void) {

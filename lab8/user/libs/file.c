@@ -16,6 +16,8 @@ close(int fd) {
     return sys_close(fd);
 }
 
+//这是用户态程序可以使用的“系统库函数”，从文件fd读取len个字节到base这个位置。
+//当fd = 0的时候，表示从stdin读取
 int
 read(int fd, void *base, size_t len) {
     return sys_read(fd, base, len);
