@@ -210,15 +210,22 @@ file_read(int fd, void *base, size_t len, size_t *copied_store) {
     int ret;
     struct file *file;
     *copied_store = 0;
+    //确保文件标识符对应的文件打开、是对应的文件
     if ((ret = fd2file(fd, &file)) != 0) {
         return ret;
     }
+    //确保文件是可读的
     if (!file->readable) {
         return -E_INVAL;
     }
+    //修改文件的读计数
     fd_array_acquire(file);
-
+    //声明并初始化一个inode的buffer
     struct iobuf __iob, *iob = iobuf_init(&__iob, base, len, file->pos);
+    
+    //调用vop_read处理
+    //在sfs_inode.c中sfs_node_fileops定义了.vop_read = sfs_read
+    //所以实际是通过vop_read指针调用了sfs_read
     ret = vop_read(file->node, iob);
 
     size_t copied = iobuf_used(iob);
