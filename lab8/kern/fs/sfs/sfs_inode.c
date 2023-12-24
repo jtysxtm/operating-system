@@ -352,18 +352,28 @@ sfs_bmap_free_nolock(struct sfs_fs *sfs, struct sfs_inode *sin, uint32_t index) 
  */
 static int
 sfs_bmap_load_nolock(struct sfs_fs *sfs, struct sfs_inode *sin, uint32_t index, uint32_t *ino_store) {
+    // 从 SFS 节点结构 sin 中获取磁盘上的 i 节点结构 din。
     struct sfs_disk_inode *din = sin->din;
+    // 使用 assert 断言确保块索引 index 不大于 i 节点中记录的块数 din->blocks
     assert(index <= din->blocks);
+    // 初始化局部变量 ret 用于保存函数调用的返回值
+    // ino 用于保存新分配的块号，create 标志表示是否需要创建新块。
+    // 当 index 等于 din->blocks 时，表示需要创建新块。
     int ret;
     uint32_t ino;
     bool create = (index == din->blocks);
+    // 调用 sfs_bmap_get_nolock 函数获取块号，并传递 create 标志
+    // 如果需要创建新块则传递 true。函数执行失败时返回错误码。
     if ((ret = sfs_bmap_get_nolock(sfs, sin, index, create, &ino)) != 0) {
         return ret;
     }
+    // 确保获取的块号 ino 在文件系统中是合法的。
     assert(sfs_block_inuse(sfs, ino));
+    // 如果创建了新块，更新 i 节点中的块数 din->blocks。
     if (create) {
         din->blocks ++;
     }
+    // 如果传递了合法的指针 ino_store，将新分配的块号存储到指定的地址。
     if (ino_store != NULL) {
         *ino_store = ino;
     }
@@ -375,13 +385,19 @@ sfs_bmap_load_nolock(struct sfs_fs *sfs, struct sfs_inode *sin, uint32_t index, 
  */
 static int
 sfs_bmap_truncate_nolock(struct sfs_fs *sfs, struct sfs_inode *sin) {
+    // 从 SFS 节点结构 sin 中获取磁盘上的 i 节点结构 din
     struct sfs_disk_inode *din = sin->din;
+    // 确保 i 节点的块数 din->blocks 不为零
     assert(din->blocks != 0);
+    // 调用 sfs_bmap_free_nolock 函数释放文件的最后一个块。din->blocks - 1 表示最后一个块的索引。
+    // 如果释放失败，返回相应的错误码。
     int ret;
     if ((ret = sfs_bmap_free_nolock(sfs, sin, din->blocks - 1)) != 0) {
         return ret;
     }
+    // 更新 i 节点中的块数，表示文件的块数减少了一个
     din->blocks --;
+    // 标记 SFS 节点为脏，表示它的内容已经发生变化
     sin->dirty = 1;
     return 0;
 }
@@ -395,21 +411,34 @@ sfs_bmap_truncate_nolock(struct sfs_fs *sfs, struct sfs_inode *sin) {
  */
 static int
 sfs_dirent_read_nolock(struct sfs_fs *sfs, struct sfs_inode *sin, int slot, struct sfs_disk_entry *entry) {
+    //  断言确保文件类型为目录 (SFS_TYPE_DIR)，并且槽位 slot 在有效范围内
     assert(sin->din->type == SFS_TYPE_DIR && (slot >= 0 && slot < sin->din->blocks));
     int ret;
     uint32_t ino;
 	// according to the DIR's inode and the slot of file entry, find the index of disk block which contains this file entry
+    // 调用 sfs_bmap_load_nolock 函数加载指定槽位 slot 对应的块映射，并获取对应的块号 ino。
+    // 如果加载失败，返回相应的错误码。
     if ((ret = sfs_bmap_load_nolock(sfs, sin, slot, &ino)) != 0) {
         return ret;
     }
+    // 断言确保块号 ino 对应的块是有效的（已分配）
     assert(sfs_block_inuse(sfs, ino));
 	// read the content of file entry in the disk block 
+    // 调用 sfs_rbuf 函数从块中读取文件项的内容到 entry 结构中。
+    // 如果读取失败，返回相应的错误码
     if ((ret = sfs_rbuf(sfs, entry, sizeof(struct sfs_disk_entry), ino, 0)) != 0) {
         return ret;
     }
+    // 在文件项的文件名字段末尾添加字符串终止符，确保字符串正确终止
     entry->name[SFS_MAX_FNAME_LEN] = '\0';
     return 0;
 }
+
+/*
+链接和解链接目录项，其中的宏展开后就是函数调用
+用于检查链接和解链接目录项的操作是否成功。
+如果操作失败，通过 warn 函数打印警告信息。
+*/
 
 #define sfs_dirent_link_nolock_check(sfs, sin, slot, lnksin, name)                  \
     do {                                                                            \
@@ -439,32 +468,45 @@ sfs_dirent_read_nolock(struct sfs_fs *sfs, struct sfs_inode *sin, int slot, stru
  */
 static int
 sfs_dirent_search_nolock(struct sfs_fs *sfs, struct sfs_inode *sin, const char *name, uint32_t *ino_store, int *slot, int *empty_slot) {
+    // 断言文件名的长度不超过最大文件名长度
     assert(strlen(name) <= SFS_MAX_FNAME_LEN);
+    // 使用 kmalloc 分配一个 sfs_disk_entry 结构的内存。
+    // 如果分配失败，返回内存不足的错误码。
     struct sfs_disk_entry *entry;
     if ((entry = kmalloc(sizeof(struct sfs_disk_entry))) == NULL) {
         return -E_NO_MEM;
     }
-
+// 设置指针 x 所指向的值为 v
 #define set_pvalue(x, v)            do { if ((x) != NULL) { *(x) = (v); } } while (0)
+    // 初始化变量 ret、i，并用目录项的块数初始化 nslots。
+    // 通过宏 set_pvalue 将 empty_slot 设置为目录项的块数。
     int ret, i, nslots = sin->din->blocks;
     set_pvalue(empty_slot, nslots);
+    // 遍历目录项
     for (i = 0; i < nslots; i ++) {
+        // 对于每个槽位，通过 sfs_dirent_read_nolock 读取目录项内容
         if ((ret = sfs_dirent_read_nolock(sfs, sin, i, entry)) != 0) {
             goto out;
         }
+        // 如果目录项的块号为零，表示槽位为空，将 empty_slot 设置为当前槽位
         if (entry->ino == 0) {
             set_pvalue(empty_slot, i);
             continue ;
         }
+        // 如果文件名匹配，将 slot 设置为当前槽位
+        // 同时将对应的文件号 (ino) 存储到 ino_store 中
         if (strcmp(name, entry->name) == 0) {
             set_pvalue(slot, i);
             set_pvalue(ino_store, entry->ino);
             goto out;
         }
     }
+// 使用 #undef 取消对 set_pvalue 的定义    
 #undef set_pvalue
+// 根据遍历结果，如果没有找到匹配的文件名，将返回 -E_NOENT 错误码
     ret = -E_NOENT;
 out:
+// 释放分配的文件项结构的内存
     kfree(entry);
     return ret;
 }

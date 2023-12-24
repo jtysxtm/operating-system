@@ -38,28 +38,28 @@
  * On-disk superblock
  */
 struct sfs_super {
-    uint32_t magic;                                 /* magic number, should be SFS_MAGIC */
-    uint32_t blocks;                                /* # of blocks in fs */
-    uint32_t unused_blocks;                         /* # of unused blocks in fs */
-    char info[SFS_MAX_INFO_LEN + 1];                /* infomation for sfs  */
+    uint32_t magic;     // 0x2f8dbe2a，检查磁盘镜像是否是合法的 SFS img                         /* magic number, should be SFS_MAGIC */
+    uint32_t blocks;    // 记录了 SFS 中所有 block 的数量，即 img 的大小                            /* # of blocks in fs */
+    uint32_t unused_blocks;     // 记录了 SFS 中还没有被使用的 block 的数量                    /* # of unused blocks in fs */
+    char info[SFS_MAX_INFO_LEN + 1];    // 包含了字符串"simple file system"         /* infomation for sfs  */
 };
 
 /* inode (on disk) */
 struct sfs_disk_inode {
-    uint32_t size;                                  /* size of the file (in bytes) */
-    uint16_t type;                                  /* one of SYS_TYPE_* above */
-    uint16_t nlinks;                                /* # of hard links to this file */
-    uint32_t blocks;                                /* # of blocks */
-    uint32_t direct[SFS_NDIRECT];                   /* direct blocks */
-    uint32_t indirect;                              /* indirect blocks */
+    uint32_t size;                              //如果inode表示常规文件，则size是文件大小
+    uint16_t type;                              //inode的文件类型
+    uint16_t nlinks;                            //此inode的硬链接数
+    uint32_t blocks;                            //此inode的数据块数的个数
+    uint32_t direct[SFS_NDIRECT];               //此inode的直接数据块索引值（有SFS_NDIRECT个）
+    uint32_t indirect;                          //此inode的一级间接数据块索引值
 //    uint32_t db_indirect;                           /* double indirect blocks */
 //   unused
 };
 
 /* file entry (on disk) */
 struct sfs_disk_entry {
-    uint32_t ino;                                   /* inode number */
-    char name[SFS_MAX_FNAME_LEN + 1];               /* file name */
+    uint32_t ino;                                   //索引节点所占数据块索引值
+    char name[SFS_MAX_FNAME_LEN + 1];               //文件名
 };
 
 #define sfs_dentry_size                             \

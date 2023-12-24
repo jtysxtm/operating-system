@@ -172,15 +172,24 @@ struct inode_ops {
     int (*vop_close)(struct inode *node);
     int (*vop_read)(struct inode *node, struct iobuf *iob);
     int (*vop_write)(struct inode *node, struct iobuf *iob);
+    //  获取文件的状态信息
     int (*vop_fstat)(struct inode *node, struct stat *stat);
+    // 将文件的所有脏缓冲区强制刷新到稳定存储
     int (*vop_fsync)(struct inode *node);
+    // 计算相对于文件系统根目录的文件路径，并将其复制到指定的 I/O 缓冲区
     int (*vop_namefile)(struct inode *node, struct iobuf *iob);
     int (*vop_getdirentry)(struct inode *node, struct iobuf *iob);
+    // 当 inode 不再使用时调用，执行资源回收
     int (*vop_reclaim)(struct inode *node);
+    // 获取文件的类型
     int (*vop_gettype)(struct inode *node, uint32_t *type_store);
+    // 检查在文件中指定位置进行 seek 操作是否合法
     int (*vop_tryseek)(struct inode *node, off_t pos);
+    // 强制设置文件的大小，丢弃任何多余的块
     int (*vop_truncate)(struct inode *node, off_t len);
+    // 在指定目录中创建一个名为 name 的常规文件
     int (*vop_create)(struct inode *node, const char *name, bool excl, struct inode **node_store);
+    // 解析相对于指定目录 node 的路径 path，并返回所引用文件的 inode
     int (*vop_lookup)(struct inode *node, char *path, struct inode **node_store);
     int (*vop_ioctl)(struct inode *node, int op, void *data);
 };
