@@ -289,6 +289,33 @@ goto out;
 
 如果要在ucore里加入UNIX的管道（Pipe)机制，至少需要定义哪些数据结构和接口？（接口给出语义即可，不必具体实现。数据结构的设计应当给出一个(或多个）具体的C语言struct定义。在网络上查找相关的Linux资料和实现，请在实验报告中给出设计实现”UNIX的PIPE机制“的概要设方案，你的设计应当体现出对可能出现的同步互斥问题的处理。）
 
+```
+struct pipe_buffer {
+	//缓冲区结构体
+	struct page *page;
+	unsigned int offset, len;
+	unsigned int flags;
+};
+```
+
+```
+struct pipe_inode_info {
+	//管道结构体
+	wait_queue wait;
+	unsigned int nrbufs, curbuf, buffers;
+	unsigned int readers;
+	unsigned int writers;
+	unsigned int files;
+	unsigned int waiting_writers;
+	struct pipe_buffer *bufs;
+	struct inode * io;
+};
+```
+
+* 在磁盘上保留一部分空间或者是一个特定的文件来作为pipe机制的缓冲区：
+  * 当某两个进程之间要求建立管道，假定将进程A的标准输出作为进程B的标准输入，那么可以在这两个进程的进程控制块上新增变量来记录进程的这种属性；在进程A, B中打开同一个缓冲区;
+  * 当进程A使用标准输出进行write系统调用、进程B使用标准输入的时候进行read系统调用的时候，通过变量选择接口时能够将这些标准输入输出的数据输入输出到缓冲区中。
+
 #### 扩展练习 Challenge2：完成基于“UNIX的软连接和硬连接机制”的设计方案
 
 如果要在ucore里加入UNIX的软连接和硬连接机制，至少需要定义哪些数据结构和接口？（接口给出语义即可，不必具体实现。数据结构的设计应当给出一个(或多个）具体的C语言struct定义。在网络上查找相关的Linux资料和实现，请在实验报告中给出设计实现”UNIX的软连接和硬连接机制“的概要设方案，你的设计应当体现出对可能出现的同步互斥问题的处理。）
