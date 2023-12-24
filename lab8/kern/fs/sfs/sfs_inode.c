@@ -594,10 +594,13 @@ sfs_close(struct inode *node) {
 static int
 sfs_io_nolock(struct sfs_fs *sfs, struct sfs_inode *sin, void *buf, off_t offset, size_t *alenp, bool write) {
     struct sfs_disk_inode *din = sin->din;
+    // 确保inode不是目录类型
     assert(din->type != SFS_TYPE_DIR);
+    // 计算Rd/Wr的结束位置
     off_t endpos = offset + *alenp, blkoff;
     *alenp = 0;
 	// calculate the Rd/Wr end position
+    // 检查Rd/Wr的合法性
     if (offset < 0 || offset >= SFS_MAX_FILE_SIZE || offset > endpos) {
         return -E_INVAL;
     }
@@ -616,8 +619,11 @@ sfs_io_nolock(struct sfs_fs *sfs, struct sfs_inode *sin, void *buf, off_t offset
         }
     }
 
+    // 函数指针，根据操作类型设置不同的函数
     int (*sfs_buf_op)(struct sfs_fs *sfs, void *buf, size_t len, uint32_t blkno, off_t offset);
     int (*sfs_block_op)(struct sfs_fs *sfs, void *buf, uint32_t blkno, uint32_t nblks);
+    
+    // 根据操作类型设置不同的函数指针
     if (write) {
         sfs_buf_op = sfs_wbuf, sfs_block_op = sfs_wblock;
     }
@@ -628,8 +634,8 @@ sfs_io_nolock(struct sfs_fs *sfs, struct sfs_inode *sin, void *buf, off_t offset
     int ret = 0;
     size_t size, alen = 0;
     uint32_t ino;
-    uint32_t blkno = offset / SFS_BLKSIZE;          // The NO. of Rd/Wr begin block
-    uint32_t nblks = endpos / SFS_BLKSIZE - blkno;  // The size of Rd/Wr blocks
+    uint32_t blkno = offset / SFS_BLKSIZE;          // 开始Rd/Wr的块号   The NO. of Rd/Wr begin block
+    uint32_t nblks = endpos / SFS_BLKSIZE - blkno;  // Rd/Wr的块数    The size of Rd/Wr blocks
 
   //LAB8:EXERCISE1 YOUR CODE HINT: call sfs_bmap_load_nolock, sfs_rbuf, sfs_rblock,etc. read different kind of blocks in file
 	/*
@@ -640,16 +646,23 @@ sfs_io_nolock(struct sfs_fs *sfs, struct sfs_inode *sin, void *buf, off_t offset
 	 *       NOTICE: useful function: sfs_bmap_load_nolock, sfs_block_op
      * (3) If end position isn't aligned with the last block, Rd/Wr some content from begin to the (endpos % SFS_BLKSIZE) of the last block
 	 *       NOTICE: useful function: sfs_bmap_load_nolock, sfs_buf_op	
+     * 如果起始位置不是对齐的，读/写从该位置到第一个块的末尾的内容。注意在这个阶段的操作时，可能只读/写了部分块，所以需要更新alen和相应的指针。
+     * 对齐的中间块，使用循环依次读取/写入完整的块。
+     * 如果结束位置不是对齐的，读/写从最后一个块的开始到结束位置的内容。同样，需要更新alen和相应的指针。
 	*/
+    // 读取非对齐的第一块
     if ((blkoff = offset % SFS_BLKSIZE) != 0|| endpos / SFS_BLKSIZE == offset / SFS_BLKSIZE)  { // 第一块是否是align的？
-        // 要找到第一块中要读的大小。如果开始 开始块与结束块，块号相同，则只读 endpos - offset长度
+        // 要找到第一块中要读的大小。如果开始块与结束块，块号相同，则只读 endpos - offset长度
         // 否则，读第一个块到结尾
         size = (nblks != 0) ? (SFS_BLKSIZE - blkoff) : (endpos - offset);
-       if ((ret = sfs_bmap_load_nolock(sfs, sin, blkno, &ino)) != 0) // 载入这个文件逻辑上第blkno个数据块，ino为所对应的 索引
+        // 载入这个文件逻辑上第blkno个数据块，ino为所对应的索引
+        if ((ret = sfs_bmap_load_nolock(sfs, sin, blkno, &ino)) != 0) 
         {
             goto out;
         }
-        if ((ret = sfs_buf_op(sfs, buf, size, ino, blkoff)) != 0) // 将第ino块（磁盘块号就是inode的序列号）从blkoff读取buf (或被写入)
+
+        // 将第ino块（磁盘块号就是inode的序列号）从blkoff读取buf (或被写入)
+        if ((ret = sfs_buf_op(sfs, buf, size, ino, blkoff)) != 0) 
         {
             goto out;
         }
@@ -662,20 +675,25 @@ sfs_io_nolock(struct sfs_fs *sfs, struct sfs_inode *sin, void *buf, off_t offset
         blkno++;
         nblks--;
     }
+
     // 对齐的中间块，循环读取
     size = SFS_BLKSIZE;
     while (nblks != 0) { 
+        // 载入这个文件逻辑上第blkno个数据块，ino为所对应的索引
         if ((ret = sfs_bmap_load_nolock(sfs, sin, blkno, &ino)) != 0) {
             goto out;
         }
-        if ((ret = sfs_block_op(sfs, buf, ino, 1)) != 0) { // 读取或写入完整的一块
+
+        // 读取或写入完整的一块
+        if ((ret = sfs_block_op(sfs, buf, ino, 1)) != 0) { 
             goto out;
         }
         alen += size, buf += size, blkno++, nblks--;
     }
     // 末尾最后一块没对齐的情况
     // 和读取第一个块类似，先找到对应的索引号，再向buffer读取应读的大小
-    if ((size = endpos % SFS_BLKSIZE) != 0) {  //更新size
+    if ((size = endpos % SFS_BLKSIZE) != 0) {  
+        // 更新size
         if ((ret = sfs_bmap_load_nolock(sfs, sin, blkno, &ino)) != 0) {
             goto out;
         }
@@ -685,10 +703,8 @@ sfs_io_nolock(struct sfs_fs *sfs, struct sfs_inode *sin, void *buf, off_t offset
         alen += size;
     }
 
-
-    
-
 out:
+    // 更新alenp，如果Rd/Wr的结束位置超过了文件大小，则更新文件大小
     *alenp = alen;
     if (offset + alen > sin->din->size) {
         sin->din->size = offset + alen;
