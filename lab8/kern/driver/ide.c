@@ -22,6 +22,7 @@ void ide_init(void) {
 
 bool ide_device_valid(unsigned short ideno) { return VALID_IDE(ideno); }
 
+// 获取指定IDE设备的大小
 size_t ide_device_size(unsigned short ideno) {
     if (ide_device_valid(ideno)) {
         return ide_devices[ideno].size;

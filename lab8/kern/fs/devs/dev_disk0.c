@@ -109,11 +109,12 @@ disk0_ioctl(struct device *dev, int op, void *data) {
 }
 
 static void
-disk0_device_init(struct device *dev) {
+disk0_device_init(struct device *dev) { // 初始化磁盘设备
     static_assert(DISK0_BLKSIZE % SECTSIZE == 0);
-    if (!ide_device_valid(DISK0_DEV_NO)) {
+    if (!ide_device_valid(DISK0_DEV_NO)) { // 检查磁盘设备是否可用
         panic("disk0 device isn't available.\n");
     }
+    // 设置磁盘设备的参数
     dev->d_blocks = ide_device_size(DISK0_DEV_NO) / DISK0_BLK_NSECT;
     dev->d_blocksize = DISK0_BLKSIZE;
     dev->d_open = disk0_open;
@@ -123,6 +124,7 @@ disk0_device_init(struct device *dev) {
     sem_init(&(disk0_sem), 1);
 
     static_assert(DISK0_BUFSIZE % DISK0_BLKSIZE == 0);
+    // 分配用于读写的缓冲区
     if ((disk0_buffer = kmalloc(DISK0_BUFSIZE)) == NULL) {
         panic("disk0 alloc buffer failed.\n");
     }
@@ -131,12 +133,16 @@ disk0_device_init(struct device *dev) {
 void
 dev_init_disk0(void) {
     struct inode *node;
+    // 创建磁盘设备对应的inode
     if ((node = dev_create_inode()) == NULL) {
         panic("disk0: dev_create_node.\n");
     }
+
+    // 初始化磁盘设备
     disk0_device_init(vop_info(node, device));
 
     int ret;
+    // 将磁盘设备添加到虚拟文件系统中
     if ((ret = vfs_add_dev("disk0", node, 1)) != 0) {
         panic("disk0: vfs_add_dev: %e.\n", ret);
     }

@@ -25,7 +25,9 @@ __alloc_fs(int type) {
 // vfs_init -  vfs initialize
 void
 vfs_init(void) {
+    // 初始化引导文件系统的信号量，初始值为1
     sem_init(&bootfs_sem, 1);
+    // 初始化虚拟文件系统设备列表
     vfs_devlist_init();
 }
 

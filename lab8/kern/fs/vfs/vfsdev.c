@@ -18,7 +18,7 @@ typedef struct {
     struct fs *fs;
     bool mountable;
     list_entry_t vdev_link;
-} vfs_dev_t;
+} vfs_dev_t;// 通过链接 vfs_dev_t 结构的双向链表找到 device 对应的 inode 数据结构
 
 #define le2vdev(le, member)                         \
     to_struct((le), vfs_dev_t, member)
@@ -30,15 +30,16 @@ static semaphore_t vdev_list_sem;  // 互斥访问的semaphore
 static void
 lock_vdev_list(void) {
     down(&vdev_list_sem);
-}
+}// 通过信号量实现对虚拟文件系统设备列表的加锁操作
 
 static void
 unlock_vdev_list(void) {
     up(&vdev_list_sem);
-}
+}// 通过信号量实现对虚拟文件系统设备列表的解锁操作
 
 void
 vfs_devlist_init(void) {
+    // 初始化虚拟文件系统设备列表，列表头指向自身，信号量初始值为1
     list_init(&vdev_list);
     sem_init(&vdev_list_sem, 1);
 }
@@ -118,16 +119,19 @@ vfs_get_devname(struct fs *fs) {
 /*
  * check_devname_confilct - Is there alreadily device which has the same name?
  */
+//判断是否已经存在同名的设备
 static bool
 check_devname_conflict(const char *devname) {
     list_entry_t *list = &vdev_list, *le = list;
+
+    // 遍历虚拟文件系统设备列表，查找是否已存在同名设备
     while ((le = list_next(le)) != list) {
         vfs_dev_t *vdev = le2vdev(le, vdev_link);
         if (strcmp(vdev->devname, devname) == 0) {
-            return 0;
+            return 0;// 存在同名设备，返回假
         }
     }
-    return 1;
+    return 1;// 不存在同名设备，返回真
 }
 
 
@@ -140,35 +144,45 @@ check_devname_conflict(const char *devname) {
 */
 static int
 vfs_do_add(const char *devname, struct inode *devnode, struct fs *fs, bool mountable) {
+    // 执行将设备添加到虚拟文件系统中的操作
     assert(devname != NULL);
     assert((devnode == NULL && !mountable) || (devnode != NULL && check_inode_type(devnode, device)));
+    // 检查设备名长度是否超过限制
     if (strlen(devname) > FS_MAX_DNAME_LEN) {
         return -E_TOO_BIG;
     }
 
     int ret = -E_NO_MEM;
+    // 复制设备名
     char *s_devname;
     if ((s_devname = strdup(devname)) == NULL) {
         return ret;
     }
 
+    // 分配并初始化虚拟文件系统设备结构
     vfs_dev_t *vdev;
     if ((vdev = kmalloc(sizeof(vfs_dev_t))) == NULL) {
         goto failed_cleanup_name;
     }
 
     ret = -E_EXISTS;
+    // 加锁，防止并发修改虚拟文件系统设备列表
     lock_vdev_list();
+    // 检查设备名是否冲突
     if (!check_devname_conflict(s_devname)) {
         unlock_vdev_list();
         goto failed_cleanup_vdev;
     }
+
+    // 初始化虚拟文件系统设备结构
     vdev->devname = s_devname;
     vdev->devnode = devnode;
     vdev->mountable = mountable;
     vdev->fs = fs;
 
+    // 将设备添加到虚拟文件系统设备列表中
     list_add(&vdev_list, &(vdev->vdev_link));
+    // 解锁虚拟文件系统设备列表
     unlock_vdev_list();
     return 0;
 
@@ -194,6 +208,7 @@ vfs_add_fs(const char *devname, struct fs *fs) {
  */
 int
 vfs_add_dev(const char *devname, struct inode *devnode, bool mountable) {
+    // 将设备添加到虚拟文件系统中
     return vfs_do_add(devname, devnode, NULL, mountable);
 }
 

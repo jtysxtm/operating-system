@@ -39,6 +39,7 @@ static inline void __list_del(list_entry_t *prev, list_entry_t *next) __attribut
  * */
 static inline void
 list_init(list_entry_t *elm) {
+    // 初始化链表节点，使其成为独立的环状链表
     elm->prev = elm->next = elm;
 }
 

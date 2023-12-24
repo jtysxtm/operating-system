@@ -153,12 +153,13 @@ dev_init(void) {
    // init_device(null);
     init_device(stdin);
     init_device(stdout);
-    init_device(disk0);
+    init_device(disk0);// 承载 SFS 文件系统的磁盘设备
 }
 /* dev_create_inode - Create inode for a vfs-level device. */
 struct inode *
-dev_create_inode(void) {
+dev_create_inode(void) { // 创建一个设备对应的inode
     struct inode *node;
+    // 分配一个inode，并进行初始化
     if ((node = alloc_inode(device)) != NULL) {
         vop_init(node, &dev_node_ops, NULL);
     }
